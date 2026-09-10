@@ -1,0 +1,94 @@
+version: 2
+
+project_name: mixpost
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: mixpost
+    main: ./cmd/mixpost
+    binary: mixpost
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/inovector/mixpost-cli/internal/cli.version={{ .Version }}
+      - -X github.com/inovector/mixpost-cli/internal/cli.commit={{ .ShortCommit }}
+      - -X github.com/inovector/mixpost-cli/internal/cli.date={{ .Date }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64, arm]
+    goarm: ["7"]
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-amd64"
+      - "ghcr.io/inovector/mixpost-cli:latest-amd64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+  - image_templates:
+      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-arm64"
+      - "ghcr.io/inovector/mixpost-cli:latest-arm64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/inovector/mixpost-cli:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-amd64"
+      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/inovector/mixpost-cli:latest"
+    image_templates:
+      - "ghcr.io/inovector/mixpost-cli:latest-amd64"
+      - "ghcr.io/inovector/mixpost-cli:latest-arm64"
+
+brews:
+  - repository:
+      owner: inovector
+      name: homebrew-tap
+    homepage: https://mixpost.app
+    description: Command line client for the Mixpost API
+    license: MIT
+    test: |
+      system "#{bin}/mixpost", "version"

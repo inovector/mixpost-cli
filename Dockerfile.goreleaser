@@ -1,0 +1,5 @@
+# Image assembled by goreleaser from an already built binary.
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY mixpost /usr/local/bin/mixpost
+ENTRYPOINT ["mixpost"]

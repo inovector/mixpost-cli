@@ -1,0 +1,5 @@
+/dist/
+/mixpost
+*.test
+.DS_Store
+coverage.out
