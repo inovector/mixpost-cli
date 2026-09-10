@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="art/cover.png" alt="Mixpost CLI">
+</p>
+
 # About Mixpost CLI
 
 Your whole social media workflow, one command away.
