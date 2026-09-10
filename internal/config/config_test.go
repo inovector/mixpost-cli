@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -58,12 +59,18 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("permissions = %o, want 600: the file holds an access token", perm)
+	// Windows has no POSIX permission bits: Go synthesises the mode from the
+	// read-only attribute, so a writable file always reports 0666 whatever
+	// Chmod was asked for. Access there is governed by the ACLs the config
+	// directory inherits.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("permissions = %o, want 600: the file holds an access token", perm)
+		}
 	}
 
 	reloaded, err := Load()
