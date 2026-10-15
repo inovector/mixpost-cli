@@ -16,7 +16,7 @@ import (
 // value stored in the active profile, and is in turn overridden by a flag.
 const (
 	EnvURL      = "MIXPOST_URL"
-	EnvKey      = "MIXPOST_KEY"
+	EnvKey      = "MIXPOST_ACCESS_KEY"
 	EnvProfile  = "MIXPOST_PROFILE"
 	EnvConfig   = "MIXPOST_CONFIG"
 	EnvOutput   = "MIXPOST_OUTPUT"
@@ -50,7 +50,7 @@ const DefaultProfile = "default"
 // Profile holds the credentials for a single Mixpost instance.
 type Profile struct {
 	URL       string `yaml:"url"`
-	Key       string `yaml:"key"`
+	Key       string `yaml:"access_key"`
 	Workspace string `yaml:"workspace,omitempty"`
 }
 

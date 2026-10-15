@@ -47,10 +47,10 @@ default /mixpost core path first and at the site root second.
 
 Create a personal access key from the user menu: click API, then Create a
 personal key. It is shown once, so copy it straight away.`,
-		Example: `  mixpost auth login --key <personal-access-key>
-  mixpost auth login --url https://example.com/mixpost --key <personal-access-key>
-  echo "$MIXPOST_KEY" | mixpost auth login --url https://example.com/mixpost --key-stdin
-  mixpost auth login --url https://staging.example.com/mixpost --key <personal-access-key> --profile staging`,
+		Example: `  mixpost auth login --access-key <personal-access-key>
+  mixpost auth login --url https://example.com/mixpost --access-key <personal-access-key>
+  echo "$MIXPOST_ACCESS_KEY" | mixpost auth login --url https://example.com/mixpost --access-key-stdin
+  mixpost auth login --url https://staging.example.com/mixpost --access-key <personal-access-key> --profile staging`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if profileName == "" {
@@ -125,8 +125,8 @@ personal key. It is shown once, so copy it straight away.`,
 
 	f := cmd.Flags()
 	f.StringVar(&urlFlag, "url", "", "self-hosted Mixpost address, e.g. https://example.com/mixpost (default: Mixpost Cloud)")
-	f.StringVar(&key, "key", "", "personal access key")
-	f.BoolVar(&keyStdin, "key-stdin", false, "read the personal access key from stdin")
+	f.StringVar(&key, "access-key", "", "personal access key")
+	f.BoolVar(&keyStdin, "access-key-stdin", false, "read the personal access key from stdin")
 	f.StringVar(&workspace, "workspace", "", "default workspace UUID for this profile")
 	f.StringVar(&profileName, "profile", "", "profile to write (default: the active profile)")
 	f.BoolVar(&noVerify, "no-verify", false, "skip the connectivity check")
@@ -190,7 +190,7 @@ func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
 // answer keeps.
 func promptKey(ctx context.Context, printer *output.Printer, baseURL, current string) (string, error) {
 	if !output.IsTTY(stdin) {
-		return "", usageError(fmt.Errorf("pass a personal access key with --key, or pipe it in with --key-stdin; create one at %s", keysPage(baseURL)))
+		return "", usageError(fmt.Errorf("pass a personal access key with --access-key, or pipe it in with --access-key-stdin; create one at %s", keysPage(baseURL)))
 	}
 	printer.PrintMessage("Create a personal access key (click Create a personal key) at:\n\n  %s\n", output.Hyperlink(printer.Err, keysPage(baseURL)))
 	if current != "" {
@@ -235,11 +235,11 @@ func newAuthStatusCommand() *cobra.Command {
 					continue
 				}
 				row := map[string]any{
-					"profile":   name,
-					"url":       profile.BaseURL(),
-					"key":       mixpost.Redact(profile.Key),
-					"workspace": profile.Workspace,
-					"active":    name == env.Profile,
+					"profile":    name,
+					"url":        profile.BaseURL(),
+					"access_key": mixpost.Redact(profile.Key),
+					"workspace":  profile.Workspace,
+					"active":     name == env.Profile,
 				}
 				if err := verifyProfile(cmd, profile); err != nil {
 					row["authenticated"] = false
@@ -309,7 +309,7 @@ func profileSummary(name string, profile *config.Profile, authenticated bool) []
 	raw, _ := json.Marshal(map[string]any{"data": []map[string]any{{
 		"profile":       name,
 		"url":           profile.BaseURL(),
-		"key":           mixpost.Redact(profile.Key),
+		"access_key":    mixpost.Redact(profile.Key),
 		"workspace":     profile.Workspace,
 		"active":        true,
 		"authenticated": authenticated,
@@ -322,7 +322,7 @@ func authColumns() []output.Column {
 		{Header: "profile", Path: "profile"},
 		{Header: "url", Path: "url", MaxWidth: 50},
 		{Header: "workspace", Path: "workspace"},
-		{Header: "key", Path: "key"},
+		{Header: "access key", Path: "access_key"},
 		{Header: "authenticated", Path: "authenticated"},
 	}
 }

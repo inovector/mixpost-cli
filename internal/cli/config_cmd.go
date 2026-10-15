@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var configKeys = []string{"url", "key", "workspace"}
+var configKeys = []string{"url", "access-key", "workspace"}
 
 func newConfigCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -41,11 +41,11 @@ func newConfigListCommand() *cobra.Command {
 			for _, name := range cfg.ProfileNames() {
 				profile := cfg.Profile(name)
 				rows = append(rows, map[string]any{
-					"profile":   name,
-					"url":       profile.BaseURL(),
-					"workspace": profile.Workspace,
-					"key":       mixpost.Redact(profile.Key),
-					"active":    name == env.Profile,
+					"profile":    name,
+					"url":        profile.BaseURL(),
+					"workspace":  profile.Workspace,
+					"access_key": mixpost.Redact(profile.Key),
+					"active":     name == env.Profile,
 				})
 			}
 			raw, err := json.Marshal(map[string]any{"data": rows})
@@ -56,7 +56,7 @@ func newConfigListCommand() *cobra.Command {
 				{Header: "profile", Path: "profile"},
 				{Header: "url", Path: "url", MaxWidth: 50},
 				{Header: "workspace", Path: "workspace"},
-				{Header: "key", Path: "key"},
+				{Header: "access key", Path: "access_key"},
 				{Header: "active", Path: "active"},
 			})
 		},
@@ -77,7 +77,7 @@ func newConfigGetCommand() *cobra.Command {
 			switch args[0] {
 			case "url":
 				fmt.Fprintln(env.Printer.Out, profile.BaseURL())
-			case "key":
+			case "access-key":
 				fmt.Fprintln(env.Printer.Out, profile.Key)
 			case "workspace":
 				fmt.Fprintln(env.Printer.Out, profile.Workspace)
@@ -113,7 +113,7 @@ func newConfigSetCommand() *cobra.Command {
 				}
 				profile.URL = normalized
 				value = normalized
-			case "key":
+			case "access-key":
 				profile.Key = value
 				value = mixpost.Redact(value)
 			case "workspace":

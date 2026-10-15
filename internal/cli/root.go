@@ -77,7 +77,7 @@ Every command writes data to stdout and progress or errors to stderr, so output
 can be piped safely. Output is a table on a terminal and JSON everywhere else.
 
 Getting started:
-  mixpost auth login --key <personal-access-key>
+  mixpost auth login --access-key <personal-access-key>
   mixpost workspace list
   mixpost config set workspace <uuid>
   mixpost account list`,
@@ -89,7 +89,7 @@ Getting started:
 	pf := root.PersistentFlags()
 	pf.StringVar(&flags.profile, "profile", "", "configuration profile to use ($MIXPOST_PROFILE)")
 	pf.StringVar(&flags.url, "url", "", "self-hosted Mixpost address, e.g. https://example.com/mixpost ($MIXPOST_URL; default: Mixpost Cloud)")
-	pf.StringVar(&flags.key, "key", "", "personal access key ($MIXPOST_KEY)")
+	pf.StringVar(&flags.key, "access-key", "", "personal access key ($MIXPOST_ACCESS_KEY)")
 	pf.StringVarP(&flags.workspace, "workspace", "w", "", "workspace uuid or name; overrides the profile's workspace")
 	pf.StringVarP(&flags.format, "output", "o", "", "output format: "+strings.Join(output.Formats, ", ")+" (default table on a terminal, json otherwise)")
 	pf.StringVar(&flags.template, "template", "", "Go template used with --output template")

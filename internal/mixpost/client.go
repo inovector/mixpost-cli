@@ -141,7 +141,7 @@ type Request struct {
 var ErrNoWorkspace = errors.New("no workspace selected: run 'mixpost workspace list' to find one, then pass -w, or run 'mixpost config set workspace <uuid>'")
 
 // ErrNoKey is returned when the client has no personal access key.
-var ErrNoKey = errors.New("no personal access key: pass --key, set MIXPOST_KEY, or run 'mixpost auth login'")
+var ErrNoKey = errors.New("no personal access key: pass --access-key, set MIXPOST_ACCESS_KEY, or run 'mixpost auth login'")
 
 // ErrWorkspaceNotFound is returned when a workspace name matches nothing, or
 // more than one thing.

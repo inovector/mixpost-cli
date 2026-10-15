@@ -558,7 +558,7 @@ func TestLoginFallsBackToTheSiteRoot(t *testing.T) {
 	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, stderr, code := runWithoutServer(t, "auth", "login", "--url", server.URL, "--key", "t")
+	_, stderr, code := runWithoutServer(t, "auth", "login", "--url", server.URL, "--access-key", "t")
 	if code != ExitOK {
 		t.Fatalf("exit code = %d, stderr: %s", code, stderr)
 	}
@@ -594,7 +594,7 @@ func TestLoginWithoutAURLStoresMixpostCloud(t *testing.T) {
 	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, stderr, code := runWithoutServer(t, "auth", "login", "--key", "key", "--no-verify")
+	_, stderr, code := runWithoutServer(t, "auth", "login", "--access-key", "key", "--no-verify")
 	if code != ExitOK {
 		t.Fatalf("exit code = %d, stderr: %s", code, stderr)
 	}
