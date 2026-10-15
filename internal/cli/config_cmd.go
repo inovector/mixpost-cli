@@ -56,7 +56,7 @@ func newConfigListCommand() *cobra.Command {
 				{Header: "profile", Path: "profile"},
 				{Header: "url", Path: "url", MaxWidth: 50},
 				{Header: "workspace", Path: "workspace"},
-				{Header: "token", Path: "token"},
+				{Header: "key", Path: "token"},
 				{Header: "active", Path: "active"},
 			})
 		},

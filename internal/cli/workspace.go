@@ -21,7 +21,7 @@ func newWorkspaceCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "workspace",
 		Aliases: []string{"workspaces", "ws"},
-		Short:   "List the workspaces your token can reach",
+		Short:   "List the workspaces your personal access key can reach",
 	}
 	cmd.AddCommand(newWorkspaceListCommand())
 	return cmd
@@ -31,8 +31,8 @@ func newWorkspaceListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
-		Short:   "List every workspace the token's owner belongs to",
-		Long: `List the workspaces the token's owner belongs to, most recently updated first.
+		Short:   "List every workspace you belong to",
+		Long: `List the workspaces you belong to, most recently updated first.
 
 Start here when you do not know your workspace UUID: take a uuid from this list
 and give it to -w, or store it with 'mixpost config set workspace'.

@@ -41,7 +41,7 @@ const CloudHost = "cloud.mixpost.app"
 const CloudPath = "/p"
 
 // DefaultBaseURL is Mixpost Cloud, used whenever no URL is configured, so a
-// Cloud user only ever needs a personal key.
+// Cloud user only ever needs a personal access key.
 const DefaultBaseURL = "https://" + CloudHost + CloudPath
 
 // DefaultProfile is the profile used when none is selected.

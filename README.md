@@ -66,12 +66,12 @@ make build && ./mixpost version
 
 ## Quick start
 
-Create a personal key: open the user menu of your Mixpost dashboard, click
-**API**, then **Create a personal key**. The key is shown once, so copy it
+Create a personal access key: open the user menu of your Mixpost dashboard,
+click **API**, then **Create a personal key**. The key is shown once, so copy it
 straight away. Then:
 
 ```bash
-mixpost auth login --token <personal-key>
+mixpost auth login --token <personal-access-key>
 mixpost workspace list                       # find your workspace UUID
 mixpost config set workspace <workspace-uuid>
 
@@ -84,7 +84,7 @@ For a self-hosted instance, pass `--url` with the address you open Mixpost at,
 including its core path:
 
 ```bash
-mixpost auth login --url https://example.com/mixpost --token <personal-key>
+mixpost auth login --url https://example.com/mixpost --token <personal-access-key>
 ```
 
 A trailing `/api` is stripped, so all of these mean the same thing:
@@ -120,7 +120,7 @@ Values resolve as **flag → environment variable → profile**:
 | Variable | Flag | Meaning |
 |---|---|---|
 | `MIXPOST_URL` | `--url` | self-hosted Mixpost address, including the core path (default: Mixpost Cloud) |
-| `MIXPOST_TOKEN` | `--token` | personal key |
+| `MIXPOST_TOKEN` | `--token` | personal access key |
 | `MIXPOST_PROFILE` | `--profile` | profile to use |
 | `MIXPOST_CONFIG` | none | path to the configuration file |
 | `MIXPOST_OUTPUT` | `-o`, `--output` | default output format |
@@ -131,8 +131,8 @@ with `mixpost config use staging`.
 
 ### The workspace is not an environment variable
 
-There is no `MIXPOST_WORKSPACE`, deliberately. The URL and the token say **who
-you are**; the workspace says **what you operate on**. One token reaches many
+There is no `MIXPOST_WORKSPACE`, deliberately. The URL and the personal access
+key say **who you are**; the workspace says **what you operate on**. One key reaches many
 workspaces, so a resource selector carried in ambient environment state would
 let the same command line mean different things in different shells:
 
@@ -140,7 +140,7 @@ let the same command line mean different things in different shells:
 mixpost post delete <uuid> --permanent --yes   # from which workspace, exactly?
 ```
 
-A wrong URL or token fails loudly with 404 or 401. A wrong but valid workspace
+A wrong URL or key fails loudly with 404 or 401. A wrong but valid workspace
 succeeds, against the wrong data. So it comes from the profile, which you write
 deliberately and can read back with `mixpost config list`, or from an explicit
 `-w` on the command.
@@ -215,8 +215,8 @@ mixpost analytics    summary|account|post|posting-times|best-times
 Instance-level. No workspace needed:
 
 ```
-mixpost workspace list    # the workspaces your token can reach
-mixpost ping              # is the instance up and the token valid (self-hosted Pro only)
+mixpost workspace list    # the workspaces your personal access key can reach
+mixpost ping              # is Mixpost up and the key valid (self-hosted Pro only)
 ```
 
 Plus `auth`, `config`, `raw`, `version` and `completion`. Run

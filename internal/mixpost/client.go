@@ -140,8 +140,8 @@ type Request struct {
 // ErrNoWorkspace is returned when a workspace-scoped call has no workspace set.
 var ErrNoWorkspace = errors.New("no workspace selected: run 'mixpost workspace list' to find one, then pass -w, or run 'mixpost config set workspace <uuid>'")
 
-// ErrNoToken is returned when the client has no access token.
-var ErrNoToken = errors.New("no access token: pass --token, set MIXPOST_TOKEN, or run 'mixpost auth login'")
+// ErrNoToken is returned when the client has no personal access key.
+var ErrNoToken = errors.New("no personal access key: pass --token, set MIXPOST_TOKEN, or run 'mixpost auth login'")
 
 // ErrWorkspaceNotFound is returned when a workspace name matches nothing, or
 // more than one thing.

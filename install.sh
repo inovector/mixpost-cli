@@ -114,7 +114,7 @@ main() {
 	*":$dir:"*) ;;
 	*) say "Add $dir to your PATH to run $BINARY from anywhere." ;;
 	esac
-	say "Next: mixpost auth login --token <personal-key>"
+	say "Next: mixpost auth login --token <personal-access-key>"
 }
 
 main "$@"
