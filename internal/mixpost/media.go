@@ -428,10 +428,35 @@ func fileMultipart(fields map[string]string, fileField, fileName, path string, o
 	}
 }
 
+// mediaTypes maps the extensions of every type the API accepts to the type it
+// expects. The system's own table is not enough: minimal images such as Alpine
+// ship none, and would send a video as text/plain.
+var mediaTypes = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".heic": "image/heic",
+	".heif": "image/heif",
+	".bmp":  "image/bmp",
+	".mp4":  "video/mp4",
+	".m4v":  "video/x-m4v",
+	".mov":  "video/quicktime",
+	".avi":  "video/x-msvideo",
+	".mkv":  "video/x-matroska",
+	".webm": "video/webm",
+	".flv":  "video/x-flv",
+	".wmv":  "video/x-ms-wmv",
+}
+
 // DetectMIME resolves a file's media type from its extension, falling back to
 // sniffing the first bytes of content.
 func DetectMIME(path string) (string, error) {
 	if ext := filepath.Ext(path); ext != "" {
+		if t, ok := mediaTypes[strings.ToLower(ext)]; ok {
+			return t, nil
+		}
 		if t := mime.TypeByExtension(ext); t != "" {
 			return strings.TrimSpace(strings.Split(t, ";")[0]), nil
 		}
