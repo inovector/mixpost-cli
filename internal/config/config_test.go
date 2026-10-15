@@ -69,7 +69,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 	profile := cfg.EnsureProfile("staging")
 	profile.URL = "https://staging.example.com/mixpost"
-	profile.Token = "secret"
+	profile.Key = "secret"
 	profile.Workspace = "ws-uuid"
 	cfg.CurrentProfile = "staging"
 
@@ -93,7 +93,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	if got == nil {
 		t.Fatal("profile staging is missing after reload")
 	}
-	if got.Token != "secret" || got.Workspace != "ws-uuid" {
+	if got.Key != "secret" || got.Workspace != "ws-uuid" {
 		t.Errorf("profile = %+v", got)
 	}
 	if reloaded.CurrentProfile != "staging" {

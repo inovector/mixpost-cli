@@ -555,10 +555,10 @@ func TestLoginFallsBackToTheSiteRoot(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yml")
 	t.Setenv(config.EnvConfig, path)
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, stderr, code := runWithoutServer(t, "auth", "login", "--url", server.URL, "--token", "t")
+	_, stderr, code := runWithoutServer(t, "auth", "login", "--url", server.URL, "--key", "t")
 	if code != ExitOK {
 		t.Fatalf("exit code = %d, stderr: %s", code, stderr)
 	}
@@ -574,7 +574,7 @@ func TestLoginFallsBackToTheSiteRoot(t *testing.T) {
 func TestMixpostCloudIsTheDefaultURL(t *testing.T) {
 	t.Setenv(config.EnvConfig, filepath.Join(t.TempDir(), "config.yml"))
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "key")
+	t.Setenv(config.EnvKey, "key")
 	t.Setenv(config.EnvProfile, "")
 
 	out, stderr, code := runWithoutServer(t, "post", "list", "-w", testWorkspace, "--dry-run")
@@ -591,10 +591,10 @@ func TestLoginWithoutAURLStoresMixpostCloud(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yml")
 	t.Setenv(config.EnvConfig, path)
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, stderr, code := runWithoutServer(t, "auth", "login", "--token", "key", "--no-verify")
+	_, stderr, code := runWithoutServer(t, "auth", "login", "--key", "key", "--no-verify")
 	if code != ExitOK {
 		t.Fatalf("exit code = %d, stderr: %s", code, stderr)
 	}
@@ -610,7 +610,7 @@ func TestLoginWithoutAURLStoresMixpostCloud(t *testing.T) {
 func TestLoginWithoutAKeySaysWhereToCreateOne(t *testing.T) {
 	t.Setenv(config.EnvConfig, filepath.Join(t.TempDir(), "config.yml"))
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
 	_, stderr, code := runWithoutServer(t, "auth", "login")

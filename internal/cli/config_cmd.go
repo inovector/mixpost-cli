@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var configKeys = []string{"url", "token", "workspace"}
+var configKeys = []string{"url", "key", "workspace"}
 
 func newConfigCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -44,7 +44,7 @@ func newConfigListCommand() *cobra.Command {
 					"profile":   name,
 					"url":       profile.BaseURL(),
 					"workspace": profile.Workspace,
-					"token":     mixpost.Redact(profile.Token),
+					"key":       mixpost.Redact(profile.Key),
 					"active":    name == env.Profile,
 				})
 			}
@@ -56,7 +56,7 @@ func newConfigListCommand() *cobra.Command {
 				{Header: "profile", Path: "profile"},
 				{Header: "url", Path: "url", MaxWidth: 50},
 				{Header: "workspace", Path: "workspace"},
-				{Header: "key", Path: "token"},
+				{Header: "key", Path: "key"},
 				{Header: "active", Path: "active"},
 			})
 		},
@@ -77,8 +77,8 @@ func newConfigGetCommand() *cobra.Command {
 			switch args[0] {
 			case "url":
 				fmt.Fprintln(env.Printer.Out, profile.BaseURL())
-			case "token":
-				fmt.Fprintln(env.Printer.Out, profile.Token)
+			case "key":
+				fmt.Fprintln(env.Printer.Out, profile.Key)
 			case "workspace":
 				fmt.Fprintln(env.Printer.Out, profile.Workspace)
 			default:
@@ -113,8 +113,8 @@ func newConfigSetCommand() *cobra.Command {
 				}
 				profile.URL = normalized
 				value = normalized
-			case "token":
-				profile.Token = value
+			case "key":
+				profile.Key = value
 				value = mixpost.Redact(value)
 			case "workspace":
 				profile.Workspace = value

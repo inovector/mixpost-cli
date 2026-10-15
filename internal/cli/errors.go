@@ -100,7 +100,7 @@ func ExitCode(err error) int {
 	if errors.As(err, &usage) {
 		return ExitUsage
 	}
-	if errors.Is(err, mixpost.ErrNoWorkspace) || errors.Is(err, mixpost.ErrNoToken) ||
+	if errors.Is(err, mixpost.ErrNoWorkspace) || errors.Is(err, mixpost.ErrNoKey) ||
 		errors.Is(err, mixpost.ErrWorkspaceNotFound) {
 		return ExitUsage
 	}

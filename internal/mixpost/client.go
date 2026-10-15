@@ -27,7 +27,7 @@ import (
 type Client struct {
 	// BaseURL is the instance URL including the core path, without /api.
 	BaseURL string
-	Token   string
+	Key     string
 	// Workspace is the uuid injected into workspace-scoped paths. It may also
 	// be a workspace name or numeric id, which is resolved to a uuid once, the
 	// first time a workspace-scoped request needs it.
@@ -54,7 +54,7 @@ type Client struct {
 // Options configures a Client.
 type Options struct {
 	BaseURL   string
-	Token     string
+	Key       string
 	Workspace string
 	Timeout   time.Duration
 	Retries   int
@@ -84,7 +84,7 @@ func New(opts Options) *Client {
 	}
 	return &Client{
 		BaseURL:   strings.TrimSuffix(opts.BaseURL, "/"),
-		Token:     opts.Token,
+		Key:       opts.Key,
 		Workspace: opts.Workspace,
 		HTTP:      &http.Client{Timeout: timeout, Transport: transport},
 		Retries:   opts.Retries,
@@ -140,8 +140,8 @@ type Request struct {
 // ErrNoWorkspace is returned when a workspace-scoped call has no workspace set.
 var ErrNoWorkspace = errors.New("no workspace selected: run 'mixpost workspace list' to find one, then pass -w, or run 'mixpost config set workspace <uuid>'")
 
-// ErrNoToken is returned when the client has no personal access key.
-var ErrNoToken = errors.New("no personal access key: pass --token, set MIXPOST_TOKEN, or run 'mixpost auth login'")
+// ErrNoKey is returned when the client has no personal access key.
+var ErrNoKey = errors.New("no personal access key: pass --key, set MIXPOST_KEY, or run 'mixpost auth login'")
 
 // ErrWorkspaceNotFound is returned when a workspace name matches nothing, or
 // more than one thing.
@@ -281,8 +281,8 @@ func appendQuery(raw string, q url.Values) (string, error) {
 
 // Do performs a request, retrying transient failures.
 func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
-	if c.Token == "" {
-		return nil, ErrNoToken
+	if c.Key == "" {
+		return nil, ErrNoKey
 	}
 	if err := c.ensureWorkspace(ctx, r); err != nil {
 		return nil, err
@@ -323,7 +323,7 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 	}
 
 	if c.DryRun {
-		info.Headers["Authorization"] = "Bearer " + redact(c.Token)
+		info.Headers["Authorization"] = "Bearer " + redact(c.Key)
 		info.Headers["Accept"] = "application/json"
 		if bodyFactory != nil && r.BodyFactory == nil {
 			info.Headers["Content-Type"] = contentType
@@ -380,7 +380,7 @@ func (c *Client) attempt(ctx context.Context, r Request, target string, bodyFact
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Authorization", "Bearer "+c.Key)
 	req.Header.Set("User-Agent", c.UserAgent)
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)

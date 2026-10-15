@@ -16,17 +16,17 @@ import (
 // value stored in the active profile, and is in turn overridden by a flag.
 const (
 	EnvURL      = "MIXPOST_URL"
-	EnvToken    = "MIXPOST_TOKEN"
+	EnvKey      = "MIXPOST_KEY"
 	EnvProfile  = "MIXPOST_PROFILE"
 	EnvConfig   = "MIXPOST_CONFIG"
 	EnvOutput   = "MIXPOST_OUTPUT"
 	EnvInsecure = "MIXPOST_INSECURE"
 )
 
-// There is deliberately no MIXPOST_WORKSPACE. The URL and the token say who
+// There is deliberately no MIXPOST_WORKSPACE. The URL and the key say who
 // you are; the workspace says what you operate on, and a resource selector
 // carried in ambient environment state makes a command mean different things
-// in different shells. A wrong URL or token fails loudly; a wrong but valid
+// in different shells. A wrong URL or key fails loudly; a wrong but valid
 // workspace succeeds against the wrong data. It comes from the profile, which
 // is written deliberately and can be inspected, or from an explicit -w.
 
@@ -50,7 +50,7 @@ const DefaultProfile = "default"
 // Profile holds the credentials for a single Mixpost instance.
 type Profile struct {
 	URL       string `yaml:"url"`
-	Token     string `yaml:"token"`
+	Key       string `yaml:"key"`
 	Workspace string `yaml:"workspace,omitempty"`
 }
 

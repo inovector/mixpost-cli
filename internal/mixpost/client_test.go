@@ -32,7 +32,7 @@ func newTestClient(t *testing.T, handler http.Handler) (*Client, *httptest.Serve
 
 	return New(Options{
 		BaseURL:   server.URL + "/mixpost",
-		Token:     "test-token",
+		Key:       "test-token",
 		Workspace: testWorkspace,
 		Retries:   0,
 		Timeout:   5 * time.Second,

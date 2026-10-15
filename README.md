@@ -53,7 +53,7 @@ go install github.com/inovector/mixpost-cli/cmd/mixpost@latest
 **Docker**
 
 ```bash
-docker run --rm -e MIXPOST_TOKEN \
+docker run --rm -e MIXPOST_KEY \
   ghcr.io/inovector/mixpost-cli:latest post list -w acme
 ```
 
@@ -71,7 +71,7 @@ click **API**, then **Create a personal key**. The key is shown once, so copy it
 straight away. Then:
 
 ```bash
-mixpost auth login --token <personal-access-key>
+mixpost auth login --key <personal-access-key>
 mixpost workspace list                       # find your workspace UUID
 mixpost config set workspace <workspace-uuid>
 
@@ -84,7 +84,7 @@ For a self-hosted instance, pass `--url` with the address you open Mixpost at,
 including its core path:
 
 ```bash
-mixpost auth login --url https://example.com/mixpost --token <personal-access-key>
+mixpost auth login --url https://example.com/mixpost --key <personal-access-key>
 ```
 
 A trailing `/api` is stripped, so all of these mean the same thing:
@@ -108,11 +108,11 @@ current_profile: production
 profiles:
   production:
     url: https://example.com/mixpost
-    token: "..."
+    key: "..."
     workspace: 3bbd0951-5b04-432b-b2a0-688588b0720e
   staging:
     url: https://staging.example.com/mixpost
-    token: "..."
+    key: "..."
 ```
 
 Values resolve as **flag → environment variable → profile**:
@@ -120,7 +120,7 @@ Values resolve as **flag → environment variable → profile**:
 | Variable | Flag | Meaning |
 |---|---|---|
 | `MIXPOST_URL` | `--url` | self-hosted Mixpost address, including the core path (default: Mixpost Cloud) |
-| `MIXPOST_TOKEN` | `--token` | personal access key |
+| `MIXPOST_KEY` | `--key` | personal access key |
 | `MIXPOST_PROFILE` | `--profile` | profile to use |
 | `MIXPOST_CONFIG` | none | path to the configuration file |
 | `MIXPOST_OUTPUT` | `-o`, `--output` | default output format |
@@ -227,9 +227,8 @@ Plus `auth`, `config`, `raw`, `version` and `completion`. Run
 This CLI covers the API available in **Mixpost Cloud, Pro and Enterprise**. The
 Enterprise admin panel under `/api/panel`, covering workspace administration,
 instance users, subscriptions and receipts, is deliberately not wrapped. Those
-endpoints
-are still reachable through the escape hatch if you run Enterprise and hold an
-admin token:
+endpoints are still reachable through the escape hatch if you run Enterprise
+and use the personal access key of an admin:
 
 ```bash
 mixpost raw GET panel/workspaces

@@ -26,7 +26,7 @@ const skipClientAnnotation = "mixpost_skip_client"
 type globalFlags struct {
 	profile   string
 	url       string
-	token     string
+	key       string
 	workspace string
 	format    string
 	template  string
@@ -77,7 +77,7 @@ Every command writes data to stdout and progress or errors to stderr, so output
 can be piped safely. Output is a table on a terminal and JSON everywhere else.
 
 Getting started:
-  mixpost auth login --token <personal-access-key>
+  mixpost auth login --key <personal-access-key>
   mixpost workspace list
   mixpost config set workspace <uuid>
   mixpost account list`,
@@ -89,7 +89,7 @@ Getting started:
 	pf := root.PersistentFlags()
 	pf.StringVar(&flags.profile, "profile", "", "configuration profile to use ($MIXPOST_PROFILE)")
 	pf.StringVar(&flags.url, "url", "", "self-hosted Mixpost address, e.g. https://example.com/mixpost ($MIXPOST_URL; default: Mixpost Cloud)")
-	pf.StringVar(&flags.token, "token", "", "personal access key ($MIXPOST_TOKEN)")
+	pf.StringVar(&flags.key, "key", "", "personal access key ($MIXPOST_KEY)")
 	pf.StringVarP(&flags.workspace, "workspace", "w", "", "workspace uuid or name; overrides the profile's workspace")
 	pf.StringVarP(&flags.format, "output", "o", "", "output format: "+strings.Join(output.Formats, ", ")+" (default table on a terminal, json otherwise)")
 	pf.StringVar(&flags.template, "template", "", "Go template used with --output template")
@@ -205,14 +205,14 @@ func setupEnv(cmd *cobra.Command, _ []string) error {
 		return usageError(fmt.Errorf("profile %q is not configured (see 'mixpost config list')", flags.profile))
 	}
 
-	baseURL, token, workspace := resolveCredentials(cfg, profileName)
-	if token == "" {
-		return usageError(fmt.Errorf("no personal access key configured; run 'mixpost auth login' or set %s", config.EnvToken))
+	baseURL, key, workspace := resolveCredentials(cfg, profileName)
+	if key == "" {
+		return usageError(fmt.Errorf("no personal access key configured; run 'mixpost auth login' or set %s", config.EnvKey))
 	}
 
 	env.Client = mixpost.New(mixpost.Options{
 		BaseURL:   baseURL,
-		Token:     token,
+		Key:       key,
 		Workspace: workspace,
 		Timeout:   flags.timeout,
 		Retries:   flags.retries,
@@ -227,22 +227,22 @@ func setupEnv(cmd *cobra.Command, _ []string) error {
 
 // resolveCredentials applies the precedence flag > environment > profile. The
 // workspace has no environment step on purpose; see the note in package config.
-func resolveCredentials(cfg *config.File, profileName string) (baseURL, token, workspace string) {
+func resolveCredentials(cfg *config.File, profileName string) (baseURL, key, workspace string) {
 	baseURL = config.DefaultBaseURL
 	if profile := cfg.Profile(profileName); profile != nil {
-		baseURL, token, workspace = profile.BaseURL(), profile.Token, profile.Workspace
+		baseURL, key, workspace = profile.BaseURL(), profile.Key, profile.Workspace
 	}
 	if v := os.Getenv(config.EnvURL); v != "" {
 		baseURL = v
 	}
-	if v := os.Getenv(config.EnvToken); v != "" {
-		token = v
+	if v := os.Getenv(config.EnvKey); v != "" {
+		key = v
 	}
 	if flags.url != "" {
 		baseURL = flags.url
 	}
-	if flags.token != "" {
-		token = flags.token
+	if flags.key != "" {
+		key = flags.key
 	}
 	if flags.workspace != "" {
 		workspace = flags.workspace
@@ -250,7 +250,7 @@ func resolveCredentials(cfg *config.File, profileName string) (baseURL, token, w
 	if normalized, err := config.NormalizeBaseURL(baseURL); err == nil {
 		baseURL = normalized
 	}
-	return baseURL, token, workspace
+	return baseURL, key, workspace
 }
 
 func skipsClient(cmd *cobra.Command) bool {

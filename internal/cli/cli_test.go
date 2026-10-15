@@ -35,7 +35,7 @@ func writeProfile(t *testing.T, baseURL, workspace string) string {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "config.yml")
-	document := "current_profile: default\nprofiles:\n  default:\n    url: " + baseURL + "\n    token: test-token\n"
+	document := "current_profile: default\nprofiles:\n  default:\n    url: " + baseURL + "\n    key: test-token\n"
 	if workspace != "" {
 		document += "    workspace: " + workspace + "\n"
 	}
@@ -45,7 +45,7 @@ func writeProfile(t *testing.T, baseURL, workspace string) string {
 
 	t.Setenv(config.EnvConfig, path)
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 	t.Setenv(config.EnvOutput, "")
 	return path
@@ -398,7 +398,7 @@ func TestUnknownOutputFormatIsAUsageError(t *testing.T) {
 func TestMissingCredentialsIsAUsageError(t *testing.T) {
 	t.Setenv(config.EnvConfig, filepath.Join(t.TempDir(), "config.yml"))
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
 	_, stderr, code := runWithoutServer(t, "post", "list")
@@ -413,7 +413,7 @@ func TestMissingCredentialsIsAUsageError(t *testing.T) {
 func TestVersionRunsWithoutCredentials(t *testing.T) {
 	t.Setenv(config.EnvConfig, filepath.Join(t.TempDir(), "config.yml"))
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 
 	out, _, code := runWithoutServer(t, "version")
 	if code != ExitOK {
@@ -428,7 +428,7 @@ func TestConfigSetNormalizesTheURL(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yml")
 	t.Setenv(config.EnvConfig, path)
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
 	if _, stderr, code := runWithoutServer(t, "config", "set", "url", "example.com/mixpost/api"); code != ExitOK {
@@ -710,10 +710,10 @@ func TestLoginStillFailsOnABadToken(t *testing.T) {
 
 	t.Setenv(config.EnvConfig, filepath.Join(t.TempDir(), "config.yml"))
 	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, _, code := runWithoutServer(t, "auth", "login", "--url", server.URL+"/mixpost", "--token", "bad")
+	_, _, code := runWithoutServer(t, "auth", "login", "--url", server.URL+"/mixpost", "--key", "bad")
 	if code != ExitUnauthorized {
 		t.Fatalf("exit code = %d, want %d", code, ExitUnauthorized)
 	}
