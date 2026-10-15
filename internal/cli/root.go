@@ -17,6 +17,7 @@ import (
 	"github.com/inovector/mixpost-cli/internal/mixpost"
 	"github.com/inovector/mixpost-cli/internal/output"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // skipClientAnnotation marks commands that must run without credentials.
@@ -48,6 +49,9 @@ type Env struct {
 	DryRun  bool
 	Yes     bool
 	Debug   bool
+
+	// ctx is the command's context, which Ctrl+C cancels.
+	ctx context.Context
 }
 
 var (
@@ -190,6 +194,7 @@ func setupEnv(cmd *cobra.Command, _ []string) error {
 		DryRun:  flags.dryRun,
 		Yes:     flags.yes,
 		Debug:   flags.debug,
+		ctx:     ctxOf(cmd),
 	}
 
 	if skipsClient(cmd) {
@@ -321,16 +326,57 @@ func (e *Env) Confirm(prompt string) error {
 	}
 
 	fmt.Fprintf(e.Printer.Err, "%s [y/N]: ", prompt)
-	reader := bufio.NewReader(stdin)
-	answer, err := reader.ReadString('\n')
+	answer, err := readTerminal(e.ctx, e.Printer.Err, false)
 	if err != nil {
-		return fmt.Errorf("read confirmation: %w", err)
+		return err
 	}
-	switch strings.ToLower(strings.TrimSpace(answer)) {
+	switch strings.ToLower(answer) {
 	case "y", "yes":
 		return nil
 	}
 	return errAborted
+}
+
+// readTerminal reads one line from the terminal, without echoing it when
+// secret. Ctrl+C cancels the command's context instead of killing the process,
+// so the read is abandoned as soon as ctx is done, with the terminal restored.
+func readTerminal(ctx context.Context, w io.Writer, secret bool) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	fd := int(stdin.Fd())
+	state, err := term.GetState(fd)
+	if err != nil {
+		return "", fmt.Errorf("read from the terminal: %w", err)
+	}
+
+	type result struct {
+		line string
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		if secret {
+			value, err := term.ReadPassword(fd)
+			fmt.Fprintln(w)
+			done <- result{string(value), err}
+			return
+		}
+		line, err := bufio.NewReader(stdin).ReadString('\n')
+		done <- result{line, err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil && r.line == "" {
+			return "", fmt.Errorf("read from the terminal: %w", r.err)
+		}
+		return strings.TrimSpace(r.line), nil
+	case <-ctx.Done():
+		term.Restore(fd, state)
+		fmt.Fprintln(w)
+		return "", errAborted
+	}
 }
 
 func commandPath(executed, root *cobra.Command) string {

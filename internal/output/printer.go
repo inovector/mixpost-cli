@@ -98,6 +98,18 @@ func IsTTY(f *os.File) bool {
 	return term.IsTerminal(int(f.Fd()))
 }
 
+// Hyperlink renders a URL for w. On a terminal it is wrapped in an OSC 8
+// hyperlink, which most terminals make clickable; terminals without OSC 8
+// ignore the sequence and show the URL, which they often detect themselves.
+// Anything that is not a terminal gets the URL as plain text.
+func Hyperlink(w io.Writer, url string) string {
+	f, ok := w.(*os.File)
+	if !ok || !IsTTY(f) || os.Getenv("TERM") == "dumb" {
+		return url
+	}
+	return "\x1b]8;;" + url + "\x1b\\" + url + "\x1b]8;;\x1b\\"
+}
+
 // DefaultFormat is a table for humans and JSON for everything else, so a
 // command in a pipe or a script always emits machine-readable output.
 func DefaultFormat() Format {

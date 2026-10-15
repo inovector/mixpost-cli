@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"github.com/inovector/mixpost-cli/internal/mixpost"
 	"github.com/inovector/mixpost-cli/internal/output"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 func newAuthCommand() *cobra.Command {
@@ -84,7 +84,7 @@ personal key. It is shown once, so copy it straight away.`,
 			case output.IsTTY(stdin) || profile.Token == "":
 				// On a terminal, always ask: logging in again is how a stale
 				// key gets replaced. Enter keeps the stored one.
-				value, err := promptToken(env.Printer, profile.URL, profile.Token)
+				value, err := promptToken(ctxOf(cmd), env.Printer, profile.URL, profile.Token)
 				if err != nil {
 					return err
 				}
@@ -188,22 +188,17 @@ func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
 // promptToken reads a personal access key from the terminal without echoing it,
 // after saying where to create one. current is the stored key, which an empty
 // answer keeps.
-func promptToken(printer *output.Printer, baseURL, current string) (string, error) {
+func promptToken(ctx context.Context, printer *output.Printer, baseURL, current string) (string, error) {
 	if !output.IsTTY(stdin) {
 		return "", usageError(fmt.Errorf("pass a personal access key with --token, or pipe it in with --token-stdin; create one at %s", keysPage(baseURL)))
 	}
-	printer.PrintMessage("Create a personal access key at %s (click Create a personal key), then paste it here.", keysPage(baseURL))
+	printer.PrintMessage("Create a personal access key (click Create a personal key) at:\n\n  %s\n", output.Hyperlink(printer.Err, keysPage(baseURL)))
 	if current != "" {
 		fmt.Fprintf(printer.Err, "Personal access key (Enter keeps %s): ", mixpost.Redact(current))
 	} else {
 		fmt.Fprint(printer.Err, "Personal access key: ")
 	}
-	value, err := term.ReadPassword(int(stdin.Fd()))
-	fmt.Fprintln(printer.Err)
-	if err != nil {
-		return "", fmt.Errorf("read token: %w", err)
-	}
-	return strings.TrimSpace(string(value)), nil
+	return readTerminal(ctx, printer.Err, true)
 }
 
 // keysPage is the dashboard page that lists and creates personal access keys.

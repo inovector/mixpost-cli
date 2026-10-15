@@ -213,3 +213,10 @@ func TestParseFormatRejectsUnknown(t *testing.T) {
 		}
 	}
 }
+
+func TestHyperlinkIsPlainTextOffATerminal(t *testing.T) {
+	var buf bytes.Buffer
+	if got := Hyperlink(&buf, "https://example.com/p/profile/api"); got != "https://example.com/p/profile/api" {
+		t.Errorf("Hyperlink = %q, want the bare URL when not writing to a terminal", got)
+	}
+}
