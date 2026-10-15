@@ -55,34 +55,6 @@ changelog:
       - "^test:"
       - "^chore:"
 
-dockers:
-  - image_templates:
-      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-amd64"
-      - "ghcr.io/inovector/mixpost-cli:latest-amd64"
-    dockerfile: Dockerfile.goreleaser
-    use: buildx
-    goarch: amd64
-    build_flag_templates:
-      - "--platform=linux/amd64"
-  - image_templates:
-      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-arm64"
-      - "ghcr.io/inovector/mixpost-cli:latest-arm64"
-    dockerfile: Dockerfile.goreleaser
-    use: buildx
-    goarch: arm64
-    build_flag_templates:
-      - "--platform=linux/arm64"
-
-docker_manifests:
-  - name_template: "ghcr.io/inovector/mixpost-cli:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-amd64"
-      - "ghcr.io/inovector/mixpost-cli:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/inovector/mixpost-cli:latest"
-    image_templates:
-      - "ghcr.io/inovector/mixpost-cli:latest-amd64"
-      - "ghcr.io/inovector/mixpost-cli:latest-arm64"
-
 # The tap and the bucket are separate public repositories, written with
 # TAP_GITHUB_TOKEN: a token that can push to both, since the workflow's own
 # token reaches only this repository.

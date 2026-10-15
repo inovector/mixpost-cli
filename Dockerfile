@@ -1,5 +1,5 @@
-# Build the CLI from source. For released versions prefer the published image:
-#   docker run --rm ghcr.io/inovector/mixpost-cli:latest version
+# Build an image of the CLI from source, for CI jobs that run in containers:
+#   docker build -t mixpost . && docker run --rm -e MIXPOST_PERSONAL_KEY mixpost version
 FROM golang:1.24-alpine AS build
 
 WORKDIR /src

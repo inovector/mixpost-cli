@@ -56,9 +56,12 @@ go install github.com/inovector/mixpost-cli/cmd/mixpost@latest
 
 **Docker**
 
+Build an image from the repository, for CI jobs that run in containers:
+
 ```bash
-docker run --rm -e MIXPOST_PERSONAL_KEY \
-  ghcr.io/inovector/mixpost-cli:latest post list -w acme
+docker build -t mixpost --build-arg VERSION=0.1.0 \
+  https://github.com/inovector/mixpost-cli.git#v0.1.0
+docker run --rm -e MIXPOST_PERSONAL_KEY mixpost post list -w acme
 ```
 
 **From source**
