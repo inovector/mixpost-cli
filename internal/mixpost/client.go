@@ -240,6 +240,10 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 func looksLikeUUID(value string) bool { return uuidPattern.MatchString(value) }
 
+// LooksLikeUUID reports whether a value has the shape of a uuid, which is how
+// commands tell a uuid apart from a name they have to look up.
+func LooksLikeUUID(value string) bool { return looksLikeUUID(value) }
+
 // instancePaths are the API paths that sit outside any workspace. "panel" is
 // the Mixpost Enterprise admin surface, which this CLI does not wrap but still
 // addresses correctly when someone reaches for it through `mixpost raw`.

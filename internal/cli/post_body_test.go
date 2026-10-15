@@ -17,8 +17,15 @@ const existingPost = `{
   "versions": [{
     "account_id": 0,
     "is_original": true,
+    "synced_with": null,
     "content": [{"body": "<div>Hello</div>", "url": "", "media": [{"id": "5", "name": "a.png"}]}],
     "options": {"mastodon": {"sensitive": false}}
+  }, {
+    "account_id": 3,
+    "is_original": false,
+    "synced_with": 0,
+    "content": [{"body": "<div>Hello</div>", "url": "", "media": []}],
+    "options": {}
   }],
   "scheduled_at": "2026-03-29 09:50:56",
   "user": {"name": "Someone"},
@@ -49,9 +56,18 @@ func TestPostToWriteBodyCollapsesRelationsToIDs(t *testing.T) {
 	if version["options"] == nil {
 		t.Error("options were dropped")
 	}
+	if _, present := version["synced_with"]; present {
+		t.Error("a version with content of its own should not gain synced_with")
+	}
+	if synced := versions[1].(map[string]any)["synced_with"]; synced != float64(0) {
+		t.Errorf("synced_with = %v, want 0: an update without it stops the version following the original", synced)
+	}
 
 	if body["date"] != "2026-03-29" || body["time"] != "09:50" {
 		t.Errorf("schedule = %v %v, want the stored scheduled_at", body["date"], body["time"])
+	}
+	if body["timezone"] != "UTC" {
+		t.Errorf("timezone = %v, want UTC: scheduled_at is UTC, and a date sent without a timezone is read in the user's", body["timezone"])
 	}
 	for _, key := range []string{"id", "uuid", "status", "user", "trashed", "scheduled_at"} {
 		if _, present := body[key]; present {
@@ -75,12 +91,14 @@ func TestParseWhen(t *testing.T) {
 	cases := []struct {
 		in         string
 		date, time string
+		absolute   bool
 	}{
-		{"2026-09-10 15:00", "2026-09-10", "15:00"},
-		{"2026-09-10T15:00", "2026-09-10", "15:00"},
-		{"2026-09-10 15:00:30", "2026-09-10", "15:00"},
-		{"2026-09-10", "2026-09-10", "00:00"},
-		{"2026-09-10T15:00:00Z", "2026-09-10", "15:00"},
+		{"2026-09-10 15:00", "2026-09-10", "15:00", false},
+		{"2026-09-10T15:00", "2026-09-10", "15:00", false},
+		{"2026-09-10 15:00:30", "2026-09-10", "15:00", false},
+		{"2026-09-10", "2026-09-10", "00:00", false},
+		{"2026-09-10T15:00:00Z", "2026-09-10", "15:00", true},
+		{"2026-09-10T15:00:00+03:00", "2026-09-10", "15:00", true},
 	}
 	for _, c := range cases {
 		got, err := parseWhen(c.in)
@@ -88,13 +106,38 @@ func TestParseWhen(t *testing.T) {
 			t.Errorf("parseWhen(%q): %v", c.in, err)
 			continue
 		}
-		if got.Format("2006-01-02") != c.date || got.Format("15:04") != c.time {
-			t.Errorf("parseWhen(%q) = %s, want %s %s", c.in, got, c.date, c.time)
+		if got.date() != c.date || got.clock() != c.time || got.absolute != c.absolute {
+			t.Errorf("parseWhen(%q) = %s %s absolute=%v, want %s %s absolute=%v", c.in, got.date(), got.clock(), got.absolute, c.date, c.time, c.absolute)
 		}
 	}
 
 	if _, err := parseWhen("next tuesday"); err == nil {
 		t.Error("expected an error for an unparsable time")
+	}
+}
+
+func TestPlaceMomentsConvertsOffsetsIntoTheRequestTimezone(t *testing.T) {
+	// An instant with an offset and no --timezone is sent in UTC.
+	offset, _ := parseWhen("2026-09-10T15:00:00+03:00")
+	tz, err := placeMoments("", &offset)
+	if err != nil || tz != "UTC" || offset.clock() != "12:00" {
+		t.Errorf("no timezone: tz=%q clock=%s err=%v, want UTC 12:00", tz, offset.clock(), err)
+	}
+
+	// With --timezone, the instant is written in that timezone.
+	offset, _ = parseWhen("2026-09-10T12:00:00Z")
+	wall, _ := parseWhen("2026-09-10 18:00")
+	tz, err = placeMoments("Europe/Chisinau", &offset, &wall)
+	if err != nil || tz != "Europe/Chisinau" || offset.clock() != "15:00" || wall.clock() != "18:00" {
+		t.Errorf("with timezone: tz=%q offset=%s wall=%s err=%v", tz, offset.clock(), wall.clock(), err)
+	}
+
+	// Wall-clock times are read in a timezone the CLI does not know, so they
+	// cannot be mixed with instants unless --timezone names it.
+	offset, _ = parseWhen("2026-09-10T12:00:00Z")
+	wall, _ = parseWhen("2026-09-10 18:00")
+	if _, err := placeMoments("", &offset, &wall); err == nil {
+		t.Error("mixing an instant and a wall-clock time without a timezone should fail")
 	}
 }
 

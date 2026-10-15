@@ -42,7 +42,7 @@ func newConfigListCommand() *cobra.Command {
 				profile := cfg.Profile(name)
 				rows = append(rows, map[string]any{
 					"profile":   name,
-					"url":       profile.URL,
+					"url":       profile.BaseURL(),
 					"workspace": profile.Workspace,
 					"token":     mixpost.Redact(profile.Token),
 					"active":    name == env.Profile,
@@ -76,7 +76,7 @@ func newConfigGetCommand() *cobra.Command {
 			}
 			switch args[0] {
 			case "url":
-				fmt.Fprintln(env.Printer.Out, profile.URL)
+				fmt.Fprintln(env.Printer.Out, profile.BaseURL())
 			case "token":
 				fmt.Fprintln(env.Printer.Out, profile.Token)
 			case "workspace":

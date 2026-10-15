@@ -19,6 +19,8 @@ func TestNormalizeBaseURL(t *testing.T) {
 		{"https://example.com/mixpost/api/", "https://example.com/mixpost"},
 		{"http://localhost:8000/mp", "http://localhost:8000/mp"},
 		{"  https://example.com/social  ", "https://example.com/social"},
+		{"cloud.mixpost.app", "https://cloud.mixpost.app/p"},
+		{"https://cloud.mixpost.app/p/api", "https://cloud.mixpost.app/p"},
 	}
 	for _, c := range cases {
 		got, err := NormalizeBaseURL(c.in)
@@ -28,6 +30,23 @@ func TestNormalizeBaseURL(t *testing.T) {
 		}
 		if got != c.want {
 			t.Errorf("NormalizeBaseURL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestBaseURLCandidatesFallBackToTheSiteRoot(t *testing.T) {
+	got, err := BaseURLCandidates("example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"https://example.com/mixpost", "https://example.com"}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("candidates = %v, want %v", got, want)
+	}
+
+	for _, in := range []string{"https://example.com/social", "cloud.mixpost.app"} {
+		if got, _ := BaseURLCandidates(in); len(got) != 1 {
+			t.Errorf("BaseURLCandidates(%q) = %v, want a single candidate", in, got)
 		}
 	}
 }

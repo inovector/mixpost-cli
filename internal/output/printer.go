@@ -109,6 +109,17 @@ func DefaultFormat() Format {
 
 // Print renders a raw JSON payload using the columns supplied by the command.
 func (p *Printer) Print(raw []byte, columns []Column) error {
+	return p.PrintWith(raw, nil, columns)
+}
+
+// PrintWith is Print for payloads whose records are not the "data" collection.
+// rows picks the records to tabulate out of the decoded document; it only
+// shapes table, csv, tsv and id output, so JSON and YAML stay the payload as
+// the API sent it. A nil rows behaves like Print.
+func (p *Printer) PrintWith(raw []byte, rows func(doc any) []any, columns []Column) error {
+	if rows == nil {
+		rows = Rows
+	}
 	switch p.Format {
 	case FormatJSON:
 		return p.printJSON(raw)
@@ -122,17 +133,17 @@ func (p *Printer) Print(raw []byte, columns []Column) error {
 	if err != nil {
 		return err
 	}
-	rows := Rows(doc)
+	records := rows(doc)
 
 	switch p.Format {
 	case FormatTable:
-		return p.printTable(rows, columns)
+		return p.printTable(records, columns)
 	case FormatCSV:
-		return p.printSeparated(rows, columns, ',')
+		return p.printSeparated(records, columns, ',')
 	case FormatTSV:
-		return p.printSeparated(rows, columns, '\t')
+		return p.printSeparated(records, columns, '\t')
 	case FormatID:
-		return p.printIDs(rows)
+		return p.printIDs(records)
 	}
 	return fmt.Errorf("unsupported output format %q", p.Format)
 }
@@ -159,6 +170,15 @@ func Rows(doc any) []any {
 		return nil
 	}
 	return []any{doc}
+}
+
+// RowsAt picks the records to tabulate from the list at a dotted path, for
+// payloads that keep their collection somewhere other than "data".
+func RowsAt(path string) func(any) []any {
+	return func(doc any) []any {
+		rows, _ := Get(doc, path).([]any)
+		return rows
+	}
 }
 
 func decode(raw []byte) (any, error) {

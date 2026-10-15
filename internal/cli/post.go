@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -41,53 +42,97 @@ func newPostCommand() *cobra.Command {
 	return cmd
 }
 
+var (
+	postStatuses        = []string{"draft", "needs_approval", "scheduled", "published", "failed", "trash"}
+	postExcludeStatuses = []string{"draft", "scheduled", "published", "failed"}
+)
+
 func newPostListCommand() *cobra.Command {
 	var (
-		list    listFlags
-		status  string
-		trashed bool
-		filters []string
+		list          listFlags
+		status        string
+		excludeStatus string
+		trashed       bool
+		keyword       string
+		accounts      []string
+		tags          []string
+		filters       []string
 	)
 
 	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List posts",
-		Long: `List posts in the current workspace.
+		Long: `List posts in the current workspace, newest first.
 
---status and --trashed are applied to the records the API returns, so combine
-them with --all to search beyond the first page. --filter passes a query
-parameter to the API untouched.`,
-		Example: `  mixpost post list --status draft --all
-  mixpost post list -o id --limit 20 | xargs -n1 mixpost post get`,
+Every filter is applied by the API, so it reaches the whole workspace rather
+than the page in hand. --account and --tag match posts carrying any of the
+given ones. --filter passes any other query parameter untouched.`,
+		Example: `  mixpost post list --status scheduled --all
+  mixpost post list --keyword launch --account linkedin
+  mixpost post list --trashed -o id | xargs mixpost post delete --permanent --yes`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			extra, err := parseFilters(filters)
+			query, err := parseFilters(filters)
 			if err != nil {
 				return err
 			}
+			if query == nil {
+				query = queryValues{}
+			}
 
-			wantStatus := cmd.Flags().Changed("status")
-			wantTrashed := cmd.Flags().Changed("trashed")
-			if wantStatus || wantTrashed {
-				list.filter = func(row map[string]any) bool {
-					if wantStatus && !strings.EqualFold(output.Stringify(row["status"]), status) {
-						return false
-					}
-					if wantTrashed && output.Stringify(row["trashed"]) != output.Stringify(trashed) {
-						return false
-					}
-					return true
+			if trashed {
+				status = "trash"
+			}
+			if status != "" {
+				if !contains(postStatuses, status) {
+					return usageError(fmt.Errorf("--status must be one of: %s", strings.Join(postStatuses, ", ")))
+				}
+				query.Set("status", status)
+			}
+			if excludeStatus != "" {
+				if !contains(postExcludeStatuses, excludeStatus) {
+					return usageError(fmt.Errorf("--exclude-status must be one of: %s", strings.Join(postExcludeStatuses, ", ")))
+				}
+				query.Set("exclude_status", excludeStatus)
+			}
+			if keyword != "" {
+				query.Set("keyword", keyword)
+			}
+			if len(accounts) > 0 {
+				ids, err := resolveAccountIDs(ctxOf(cmd), env.Client, splitList(accounts))
+				if err != nil {
+					return err
+				}
+				for _, id := range ids {
+					query.Add("accounts[]", itoa(id))
 				}
 			}
-			return list.run(cmd, env, "posts", extra, postColumns())
+			if len(tags) > 0 {
+				ids, err := resolveTagIDs(ctxOf(cmd), env.Client, splitList(tags), false)
+				if err != nil {
+					return err
+				}
+				for _, id := range ids {
+					query.Add("tags[]", itoa(id))
+				}
+			}
+			return list.run(cmd, env, "posts", query, postColumns())
 		},
 	}
+	list.maxSize = 100
 	list.register(cmd)
 	f := cmd.Flags()
-	f.StringVar(&status, "status", "", "keep only posts with this status, e.g. draft, scheduled, published, failed")
-	f.BoolVar(&trashed, "trashed", false, "keep only trashed posts (--trashed=false keeps only untrashed)")
+	f.StringVar(&status, "status", "", "only posts with this status: "+strings.Join(postStatuses, ", "))
+	f.StringVar(&excludeStatus, "exclude-status", "", "leave out posts with this status: "+strings.Join(postExcludeStatuses, ", "))
+	f.BoolVar(&trashed, "trashed", false, "only posts in the trash; same as --status trash")
+	f.StringVar(&keyword, "keyword", "", "only posts whose text contains this")
+	f.StringArrayVarP(&accounts, "account", "a", nil, "only posts to this account (id, uuid, username or provider); repeatable")
+	f.StringArrayVarP(&tags, "tag", "t", nil, "only posts with this tag (id, uuid or name); repeatable")
 	f.StringArrayVar(&filters, "filter", nil, "extra query parameter as key=value; repeatable")
+	cmd.MarkFlagsMutuallyExclusive("status", "trashed")
+	cmd.RegisterFlagCompletionFunc("status", fixedCompletion(postStatuses))
+	cmd.RegisterFlagCompletionFunc("exclude-status", fixedCompletion(postExcludeStatuses))
 	return cmd
 }
 
@@ -154,8 +199,12 @@ func newPostUpdateCommand() *cobra.Command {
 		Long: `Update a post.
 
 The API replaces the whole post, so by default the current post is fetched
-first and the flags are applied on top of it. Pass --from-existing=false to send
-only what the flags describe.`,
+first and the flags are applied on top of it, keeping it at the same moment.
+Pass --from-existing=false to send only what the flags describe.
+
+A scheduled post moves with --at, or with --date and --time together, read in
+--timezone or your user timezone. A scheduled post is checked again against
+what its platforms require.`,
 		Example: `  mixpost post update 8eb4e98d-... --text "Corrected text"
   mixpost post update 8eb4e98d-... --at "2026-09-11 09:00" --timezone Europe/Chisinau`,
 		Args: exactArgs(1, "mixpost post update <post-uuid>"),
@@ -192,23 +241,42 @@ only what the flags describe.`,
 }
 
 func newPostScheduleCommand() *cobra.Command {
-	var now bool
+	var (
+		now  bool
+		when scheduleFlags
+	)
 
 	cmd := &cobra.Command{
 		Use:   "schedule <post-uuid>...",
 		Short: "Schedule a post, or publish it immediately with --now",
 		Long: `Move a post out of draft.
 
-Without --now the post goes out at the time already stored on it, so set that
-time first with 'mixpost post update <uuid> --at ...'.`,
+Without a time the post goes out at the date and time already stored on it.
+--at, or --date with --time, moves it as it is scheduled. --account-at gives an
+account a time of its own; accounts without one publish with the post.
+
+The post is checked against what each of its platforms requires first, and a
+422 lists every requirement it does not meet.`,
 		Example: `  mixpost post schedule 8eb4e98d-...
-  mixpost post schedule 8eb4e98d-... --now`,
+  mixpost post schedule 8eb4e98d-... --now
+  mixpost post schedule 8eb4e98d-... --at "2026-09-10 15:00" --tz Europe/Chisinau
+  mixpost post schedule 8eb4e98d-... --at "2026-09-10 15:00" --account-at linkedin="2026-09-10 18:00"`,
 		Args: minArgs(1, "mixpost post schedule <post-uuid>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if now && when.changed(cmd) {
+				return usageError(errors.New("--now publishes at once; it cannot be combined with a time"))
+			}
+			body, err := when.build(ctxOf(cmd), cmd, env.Client)
+			if err != nil {
+				return err
+			}
+			if body == nil {
+				body = map[string]any{}
+			}
+			body["postNow"] = now
+
 			for _, uuid := range args {
-				resp, err := env.Client.Call(ctxOf(cmd), http.MethodPost, "posts/schedule/"+uuid, nil, map[string]any{
-					"postNow": now,
-				})
+				resp, err := env.Client.Call(ctxOf(cmd), http.MethodPost, "posts/schedule/"+uuid, nil, body)
 				if err != nil {
 					return err
 				}
@@ -220,6 +288,7 @@ time first with 'mixpost post update <uuid> --at ...'.`,
 		},
 	}
 	cmd.Flags().BoolVar(&now, "now", false, "publish immediately instead of at the stored time")
+	when.register(cmd)
 	return cmd
 }
 
@@ -245,13 +314,31 @@ func newPostQueueCommand() *cobra.Command {
 }
 
 func newPostApproveCommand() *cobra.Command {
-	return &cobra.Command{
+	var when scheduleFlags
+
+	cmd := &cobra.Command{
 		Use:   "approve <post-uuid>...",
 		Short: "Approve posts that are waiting for review",
-		Args:  minArgs(1, "mixpost post approve <post-uuid>"),
+		Long: `Approve posts that are waiting for review, scheduling them.
+
+Without a time a post keeps the date and time it carries. --at, or --date with
+--time, moves it as it is approved, and --account-at gives an account a time of
+its own.`,
+		Example: `  mixpost post approve 8eb4e98d-...
+  mixpost post approve 8eb4e98d-... --at "2026-09-11 09:00" --tz Europe/Chisinau`,
+		Args: minArgs(1, "mixpost post approve <post-uuid>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			body, err := when.build(ctxOf(cmd), cmd, env.Client)
+			if err != nil {
+				return err
+			}
+
 			for _, uuid := range args {
-				resp, err := env.Client.Call(ctxOf(cmd), http.MethodPost, "posts/approve/"+uuid, nil, nil)
+				var payload any
+				if body != nil {
+					payload = body
+				}
+				resp, err := env.Client.Call(ctxOf(cmd), http.MethodPost, "posts/approve/"+uuid, nil, payload)
 				if err != nil {
 					return err
 				}
@@ -262,6 +349,8 @@ func newPostApproveCommand() *cobra.Command {
 			return nil
 		},
 	}
+	when.register(cmd)
+	return cmd
 }
 
 var deleteModes = []string{"app_only", "app_and_social", "social_only"}
@@ -310,9 +399,7 @@ for confirmation first; in a script, pass --yes as well.`,
 	f := cmd.Flags()
 	f.BoolVar(&permanent, "permanent", false, "delete permanently instead of moving to the trash")
 	f.StringVar(&deleteMode, "delete-mode", "app_only", "where to delete from: "+strings.Join(deleteModes, ", "))
-	cmd.RegisterFlagCompletionFunc("delete-mode", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
-		return deleteModes, cobra.ShellCompDirectiveNoFileComp
-	})
+	cmd.RegisterFlagCompletionFunc("delete-mode", fixedCompletion(deleteModes))
 	return cmd
 }
 
@@ -340,6 +427,11 @@ func postToWriteBody(post map[string]any) map[string]any {
 				"account_id":  version["account_id"],
 				"is_original": version["is_original"],
 			}
+			// A version that follows another stops following when an update
+			// leaves synced_with out.
+			if synced, ok := version["synced_with"]; ok && synced != nil {
+				clean["synced_with"] = synced
+			}
 			if options, ok := asMap(version["options"]); ok {
 				clean["options"] = options
 			}
@@ -366,14 +458,16 @@ func postToWriteBody(post map[string]any) map[string]any {
 		body["versions"] = rebuilt
 	}
 
-	// scheduled_at comes back rendered in the workspace timezone; sending it
-	// back without a timezone keeps the post at the same moment.
+	// scheduled_at comes back in UTC, while a date and time sent without a
+	// timezone are read in the user's timezone, so the timezone goes with them
+	// to keep the post at the same moment.
 	if scheduled := output.Stringify(post["scheduled_at"]); scheduled != "" {
 		if date, timeOf, ok := strings.Cut(scheduled, " "); ok {
 			body["date"] = date
 			if len(timeOf) >= 5 {
 				body["time"] = timeOf[:5]
 			}
+			body["timezone"] = "UTC"
 		}
 	}
 	return body
@@ -420,4 +514,11 @@ func contains(list []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// fixedCompletion completes a flag from a fixed list of values.
+func fixedCompletion(values []string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return values, cobra.ShellCompDirectiveNoFileComp
+	}
 }

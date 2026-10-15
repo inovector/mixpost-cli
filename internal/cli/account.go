@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"strings"
-
 	"github.com/inovector/mixpost-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -15,6 +13,7 @@ func accountColumns() []output.Column {
 		{Header: "username", Path: "username", MaxWidth: 30},
 		{Header: "provider", Path: "provider"},
 		{Header: "authorized", Path: "authorized"},
+		{Header: "profile", Path: "profile_url", MaxWidth: 40},
 	}
 }
 
@@ -30,27 +29,47 @@ func newAccountCommand() *cobra.Command {
 
 func newAccountListCommand() *cobra.Command {
 	var (
-		list     listFlags
-		provider string
+		list         listFlags
+		providers    []string
+		keyword      string
+		group        string
+		unauthorized bool
 	)
 
 	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List connected social accounts",
-		Args:    cobra.NoArgs,
+		Long: `List the social accounts connected to the workspace. The list is never
+paginated; the filters narrow it and combine with each other.`,
+		Example: `  mixpost account list --provider instagram --provider linkedin
+  mixpost account list --unauthorized
+  mixpost account list --keyword acme -o id`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if provider != "" {
-				// The endpoint takes no provider filter, so it is applied here.
-				list.filter = func(row map[string]any) bool {
-					return strings.EqualFold(output.Stringify(row["provider"]), provider)
-				}
+			query := queryValues{}
+			for _, provider := range splitList(providers) {
+				query.Add("providers[]", provider)
 			}
-			return list.run(cmd, env, "accounts", nil, accountColumns())
+			if keyword != "" {
+				query.Set("keyword", keyword)
+			}
+			if group != "" {
+				query.Set("group", group)
+			}
+			if unauthorized {
+				query.Set("unauthorized", "1")
+			}
+
+			return list.run(cmd, env, "accounts", query, accountColumns())
 		},
 	}
 	list.register(cmd)
-	cmd.Flags().StringVar(&provider, "provider", "", "keep only accounts of this provider, e.g. twitter, linkedin, mastodon")
+	f := cmd.Flags()
+	f.StringArrayVar(&providers, "provider", nil, "only accounts on this platform, e.g. twitter, linkedin, mastodon; repeatable")
+	f.StringVar(&keyword, "keyword", "", "only accounts whose name, username or platform contains this")
+	f.StringVar(&group, "group", "", `only accounts in this account group uuid, or "ungrouped"`)
+	f.BoolVar(&unauthorized, "unauthorized", false, "only accounts whose connection was lost and need reconnecting")
 	return cmd
 }
 

@@ -34,6 +34,16 @@ const (
 // It mirrors the default value of MIXPOST_CORE_PATH in a Mixpost install.
 const DefaultCorePath = "mixpost"
 
+// CloudHost is Mixpost Cloud, which serves every workspace's API under /p.
+const CloudHost = "cloud.mixpost.app"
+
+// CloudPath is the path Mixpost Cloud serves Mixpost under.
+const CloudPath = "/p"
+
+// DefaultBaseURL is Mixpost Cloud, used whenever no URL is configured, so a
+// Cloud user only ever needs a personal key.
+const DefaultBaseURL = "https://" + CloudHost + CloudPath
+
 // DefaultProfile is the profile used when none is selected.
 const DefaultProfile = "default"
 
@@ -42,6 +52,15 @@ type Profile struct {
 	URL       string `yaml:"url"`
 	Token     string `yaml:"token"`
 	Workspace string `yaml:"workspace,omitempty"`
+}
+
+// BaseURL is the URL the profile addresses: its own, or Mixpost Cloud when it
+// sets none.
+func (p *Profile) BaseURL() string {
+	if p.URL != "" {
+		return p.URL
+	}
+	return DefaultBaseURL
 }
 
 // File is the on-disk configuration document.
@@ -194,31 +213,48 @@ func sortStrings(s []string) {
 //	example.com                  -> https://example.com/mixpost
 //	https://example.com/mixpost/ -> https://example.com/mixpost
 //	https://example.com/mp/api   -> https://example.com/mp
+//	cloud.mixpost.app            -> https://cloud.mixpost.app/p
 func NormalizeBaseURL(raw string) (string, error) {
+	candidates, err := BaseURLCandidates(raw)
+	if err != nil {
+		return "", err
+	}
+	return candidates[0], nil
+}
+
+// BaseURLCandidates lists the base URLs an address may mean, most likely
+// first. An address without a path usually means the default core path, but an
+// install can serve Mixpost from the site root, so the root is the fallback
+// for a login to try. Mixpost Cloud has one fixed path.
+func BaseURLCandidates(raw string) ([]string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", fmt.Errorf("empty URL")
+		return nil, fmt.Errorf("empty URL")
 	}
 	if !strings.Contains(raw, "://") {
 		raw = "https://" + raw
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("invalid URL %q: %w", raw, err)
+		return nil, fmt.Errorf("invalid URL %q: %w", raw, err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", fmt.Errorf("invalid URL %q: scheme must be http or https", raw)
+		return nil, fmt.Errorf("invalid URL %q: scheme must be http or https", raw)
 	}
 	if u.Host == "" {
-		return "", fmt.Errorf("invalid URL %q: missing host", raw)
+		return nil, fmt.Errorf("invalid URL %q: missing host", raw)
 	}
 
 	path := strings.TrimSuffix(u.Path, "/")
 	path = strings.TrimSuffix(path, "/api")
 	path = strings.TrimSuffix(path, "/")
-	if path == "" {
-		path = "/" + DefaultCorePath
-	}
 
-	return u.Scheme + "://" + u.Host + path, nil
+	site := u.Scheme + "://" + u.Host
+	switch {
+	case path != "":
+		return []string{site + path}, nil
+	case strings.EqualFold(u.Hostname(), CloudHost):
+		return []string{site + CloudPath}, nil
+	}
+	return []string{site + "/" + DefaultCorePath, site}, nil
 }
