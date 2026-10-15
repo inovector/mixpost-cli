@@ -83,12 +83,25 @@ docker_manifests:
       - "ghcr.io/inovector/mixpost-cli:latest-amd64"
       - "ghcr.io/inovector/mixpost-cli:latest-arm64"
 
+# The tap and the bucket are separate public repositories, written with
+# TAP_GITHUB_TOKEN: a token that can push to both, since the workflow's own
+# token reaches only this repository.
 brews:
   - repository:
       owner: inovector
       name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: https://mixpost.app
     description: Command line client for the Mixpost API
     license: MIT
     test: |
       system "#{bin}/mixpost", "version"
+
+scoops:
+  - repository:
+      owner: inovector
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: https://mixpost.app
+    description: Command line client for the Mixpost API
+    license: MIT

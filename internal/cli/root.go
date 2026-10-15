@@ -66,14 +66,14 @@ func NewRootCommand() *cobra.Command {
 
 	root := &cobra.Command{
 		Use:   "mixpost",
-		Short: "Control a Mixpost instance from the command line",
+		Short: "Control Mixpost from the command line",
 		Long: `mixpost drives the Mixpost API from scripts, CI jobs and AI agents.
 
 Every command writes data to stdout and progress or errors to stderr, so output
 can be piped safely. Output is a table on a terminal and JSON everywhere else.
 
 Getting started:
-  mixpost auth login --url https://example.com/mixpost --token <token>
+  mixpost auth login --token <personal-key>
   mixpost workspace list
   mixpost config set workspace <uuid>
   mixpost account list`,
@@ -84,8 +84,8 @@ Getting started:
 
 	pf := root.PersistentFlags()
 	pf.StringVar(&flags.profile, "profile", "", "configuration profile to use ($MIXPOST_PROFILE)")
-	pf.StringVar(&flags.url, "url", "", "instance URL including the core path ($MIXPOST_URL)")
-	pf.StringVar(&flags.token, "token", "", "access token ($MIXPOST_TOKEN)")
+	pf.StringVar(&flags.url, "url", "", "self-hosted Mixpost address, e.g. https://example.com/mixpost ($MIXPOST_URL; default: Mixpost Cloud)")
+	pf.StringVar(&flags.token, "token", "", "personal key ($MIXPOST_TOKEN)")
 	pf.StringVarP(&flags.workspace, "workspace", "w", "", "workspace uuid or name; overrides the profile's workspace")
 	pf.StringVarP(&flags.format, "output", "o", "", "output format: "+strings.Join(output.Formats, ", ")+" (default table on a terminal, json otherwise)")
 	pf.StringVar(&flags.template, "template", "", "Go template used with --output template")
@@ -105,6 +105,8 @@ Getting started:
 		newPostCommand(),
 		newTagCommand(),
 		newMediaCommand(),
+		newMentionCommand(),
+		newAnalyticsCommand(),
 		newWorkspaceCommand(),
 		newPingCommand(),
 		newRawCommand(),
@@ -199,9 +201,6 @@ func setupEnv(cmd *cobra.Command, _ []string) error {
 	}
 
 	baseURL, token, workspace := resolveCredentials(cfg, profileName)
-	if baseURL == "" {
-		return usageError(fmt.Errorf("no instance URL configured; run 'mixpost auth login --url <url> --token <token>' or set %s", config.EnvURL))
-	}
 	if token == "" {
 		return usageError(fmt.Errorf("no access token configured; run 'mixpost auth login' or set %s", config.EnvToken))
 	}
@@ -224,8 +223,9 @@ func setupEnv(cmd *cobra.Command, _ []string) error {
 // resolveCredentials applies the precedence flag > environment > profile. The
 // workspace has no environment step on purpose; see the note in package config.
 func resolveCredentials(cfg *config.File, profileName string) (baseURL, token, workspace string) {
+	baseURL = config.DefaultBaseURL
 	if profile := cfg.Profile(profileName); profile != nil {
-		baseURL, token, workspace = profile.URL, profile.Token, profile.Workspace
+		baseURL, token, workspace = profile.BaseURL(), profile.Token, profile.Workspace
 	}
 	if v := os.Getenv(config.EnvURL); v != "" {
 		baseURL = v
@@ -242,10 +242,8 @@ func resolveCredentials(cfg *config.File, profileName string) (baseURL, token, w
 	if flags.workspace != "" {
 		workspace = flags.workspace
 	}
-	if baseURL != "" {
-		if normalized, err := config.NormalizeBaseURL(baseURL); err == nil {
-			baseURL = normalized
-		}
+	if normalized, err := config.NormalizeBaseURL(baseURL); err == nil {
+		baseURL = normalized
 	}
 	return baseURL, token, workspace
 }
@@ -276,6 +274,18 @@ func (e *Env) Render(resp *mixpost.Response, columns []output.Column) error {
 		return e.renderDryRun(resp.Request)
 	}
 	return e.Printer.Print(resp.Body, columns)
+}
+
+// RenderWith prints an API response whose tabular records are picked by rows
+// rather than read from the "data" collection.
+func (e *Env) RenderWith(resp *mixpost.Response, rows func(any) []any, columns []output.Column) error {
+	if resp == nil {
+		return nil
+	}
+	if resp.Status == 0 {
+		return e.renderDryRun(resp.Request)
+	}
+	return e.Printer.PrintWith(resp.Body, rows, columns)
 }
 
 // RenderRaw prints a payload the command assembled itself.

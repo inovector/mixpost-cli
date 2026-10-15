@@ -2,10 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/inovector/mixpost-cli/internal/mixpost"
 	"github.com/spf13/cobra"
@@ -55,7 +55,7 @@ func (p *postFlags) register(cmd *cobra.Command) {
 	f.StringVar(&p.at, "at", "", `schedule time, e.g. "2026-09-10 15:00" or RFC 3339; implies --schedule`)
 	f.StringVar(&p.date, "date", "", "schedule date as YYYY-MM-DD")
 	f.StringVar(&p.timeOf, "time", "", "schedule time as HH:MM")
-	f.StringVar(&p.timezone, "timezone", "", "IANA timezone for --at, --date and --time, e.g. Europe/Chisinau")
+	f.StringVar(&p.timezone, "timezone", "", "IANA timezone for --at, --date and --time, e.g. Europe/Chisinau (default: your user timezone)")
 
 	f.BoolVar(&p.schedule, "schedule", false, "schedule the post instead of leaving it a draft")
 	f.BoolVar(&p.now, "now", false, "publish immediately; implies --schedule")
@@ -64,13 +64,7 @@ func (p *postFlags) register(cmd *cobra.Command) {
 	f.StringArrayVar(&p.options, "option", nil, `per-provider option as path=value, e.g. --option mastodon.sensitive=true`)
 	f.StringVar(&p.optionsFile, "options-file", "", "JSON file holding the options object")
 
-	// --tz is accepted as a shorthand for --timezone.
-	f.SetNormalizeFunc(func(_ *pflag.FlagSet, name string) pflag.NormalizedName {
-		if name == "tz" {
-			name = "timezone"
-		}
-		return pflag.NormalizedName(name)
-	})
+	acceptTZShorthand(cmd)
 
 	cmd.MarkFlagsMutuallyExclusive("at", "date")
 	cmd.MarkFlagsMutuallyExclusive("at", "time")
@@ -83,6 +77,8 @@ func (p *postFlags) build(ctx context.Context, cmd *cobra.Command, client *mixpo
 	body := base
 	if body == nil {
 		body = map[string]any{}
+	} else if err := p.rebaseSchedule(cmd, body); err != nil {
+		return nil, err
 	}
 
 	if p.file != "" {
@@ -157,16 +153,40 @@ func (p *postFlags) build(ctx context.Context, cmd *cobra.Command, client *mixpo
 	return body, nil
 }
 
+// rebaseSchedule prepares the schedule carried over from an existing post,
+// which postToWriteBody writes in UTC. A flag that moves the post replaces the
+// stored date and time together, so the old half is never read in another
+// timezone, and the carried UTC gives way to the timezone of the new time.
+func (p *postFlags) rebaseSchedule(cmd *cobra.Command, body map[string]any) error {
+	changesDate := cmd.Flags().Changed("date")
+	changesTime := cmd.Flags().Changed("time")
+	_, scheduled := body["date"]
+
+	switch {
+	case p.at != "" || (changesDate && changesTime):
+		delete(body, "timezone")
+	case changesDate || changesTime:
+		if scheduled {
+			return usageError(errors.New("--date and --time move a scheduled post together; pass both, or --at"))
+		}
+	case p.timezone != "" && scheduled:
+		return usageError(errors.New("--timezone says how to read --at, --date and --time; pass one of them to move the post"))
+	}
+	return nil
+}
+
 func (p *postFlags) applySchedule(cmd *cobra.Command, body map[string]any) error {
-	date, timeOf := p.date, p.timeOf
+	date, timeOf, timezone := p.date, p.timeOf, p.timezone
 
 	if p.at != "" {
 		parsed, err := parseWhen(p.at)
 		if err != nil {
 			return err
 		}
-		date = parsed.Format("2006-01-02")
-		timeOf = parsed.Format("15:04")
+		if timezone, err = placeMoments(timezone, &parsed); err != nil {
+			return err
+		}
+		date, timeOf = parsed.date(), parsed.clock()
 	}
 
 	if date != "" {
@@ -175,8 +195,8 @@ func (p *postFlags) applySchedule(cmd *cobra.Command, body map[string]any) error
 	if timeOf != "" {
 		body["time"] = timeOf
 	}
-	if p.timezone != "" {
-		body["timezone"] = p.timezone
+	if timezone != "" {
+		body["timezone"] = timezone
 	}
 
 	switch {
@@ -279,34 +299,14 @@ func mergeMaps(dst, src map[string]any) {
 	}
 }
 
-// whenLayouts are the accepted spellings of --at, from most to least specific.
-var whenLayouts = []string{
-	time.RFC3339,
-	"2006-01-02T15:04:05",
-	"2006-01-02T15:04",
-	"2006-01-02 15:04:05",
-	"2006-01-02 15:04",
-	"2006-01-02",
-	"15:04",
-}
-
-func parseWhen(value string) (time.Time, error) {
-	trimmed := strings.TrimSpace(value)
-	if strings.EqualFold(trimmed, "now") {
-		return time.Now(), nil
-	}
-	for _, layout := range whenLayouts {
-		parsed, err := time.ParseInLocation(layout, trimmed, time.Local)
-		if err != nil {
-			continue
+// acceptTZShorthand lets --tz stand for --timezone.
+func acceptTZShorthand(cmd *cobra.Command) {
+	cmd.Flags().SetNormalizeFunc(func(_ *pflag.FlagSet, name string) pflag.NormalizedName {
+		if name == "tz" {
+			name = "timezone"
 		}
-		if layout == "15:04" {
-			now := time.Now()
-			return time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, time.Local), nil
-		}
-		return parsed, nil
-	}
-	return time.Time{}, usageError(fmt.Errorf(`cannot read %q as a time; use "2006-01-02 15:04", "2006-01-02", "15:04" or RFC 3339`, value))
+		return pflag.NormalizedName(name)
+	})
 }
 
 // resolveAccountIDs accepts numeric ids directly and looks anything else up
@@ -322,27 +322,65 @@ func resolveAccountIDs(ctx context.Context, client *mixpost.Client, specs []stri
 	if err != nil {
 		return nil, fmt.Errorf("look up accounts to resolve %s: %w", strings.Join(pending, ", "), err)
 	}
-
 	for _, spec := range pending {
-		var matches []mixpost.Account
-		for _, account := range accounts {
-			if account.UUID == spec ||
-				strings.EqualFold(account.Username, spec) ||
-				strings.EqualFold(account.Name, spec) ||
-				strings.EqualFold(account.Provider, spec) {
-				matches = append(matches, account)
-			}
+		account, err := matchAccount(accounts, spec)
+		if err != nil {
+			return nil, err
 		}
-		switch len(matches) {
-		case 0:
-			return nil, usageError(fmt.Errorf("no account matches %q; available: %s", spec, describeAccounts(accounts)))
-		case 1:
-			ids = append(ids, matches[0].ID)
-		default:
-			return nil, usageError(fmt.Errorf("%q matches %d accounts (%s); use an id or a uuid", spec, len(matches), describeAccounts(matches)))
-		}
+		ids = append(ids, account.ID)
 	}
 	return dedupe(ids), nil
+}
+
+// resolveAccountUUIDs is resolveAccountIDs for the endpoints that name
+// accounts by uuid. A uuid costs no lookup.
+func resolveAccountUUIDs(ctx context.Context, client *mixpost.Client, specs []string) ([]string, error) {
+	var uuids, pending []string
+	for _, spec := range specs {
+		if mixpost.LooksLikeUUID(spec) {
+			uuids = append(uuids, spec)
+			continue
+		}
+		pending = append(pending, spec)
+	}
+	if len(pending) == 0 {
+		return uuids, nil
+	}
+
+	accounts, err := client.Accounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("look up accounts to resolve %s: %w", strings.Join(pending, ", "), err)
+	}
+	for _, spec := range pending {
+		account, err := matchAccount(accounts, spec)
+		if err != nil {
+			return nil, err
+		}
+		uuids = append(uuids, account.UUID)
+	}
+	return uuids, nil
+}
+
+// matchAccount finds the one account a spec names: its id, uuid, username,
+// display name or provider.
+func matchAccount(accounts []mixpost.Account, spec string) (mixpost.Account, error) {
+	var matches []mixpost.Account
+	for _, account := range accounts {
+		if strconv.Itoa(account.ID) == spec ||
+			account.UUID == spec ||
+			strings.EqualFold(account.Username, spec) ||
+			strings.EqualFold(account.Name, spec) ||
+			strings.EqualFold(account.Provider, spec) {
+			matches = append(matches, account)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return mixpost.Account{}, usageError(fmt.Errorf("no account matches %q; available: %s", spec, describeAccounts(accounts)))
+	case 1:
+		return matches[0], nil
+	}
+	return mixpost.Account{}, usageError(fmt.Errorf("%q matches %d accounts (%s); use an id or a uuid", spec, len(matches), describeAccounts(matches)))
 }
 
 func describeAccounts(accounts []mixpost.Account) string {

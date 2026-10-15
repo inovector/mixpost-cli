@@ -25,9 +25,13 @@ type listFlags struct {
 	all     bool
 	limit   int
 
-	// filter, when set, is applied to the fetched records before printing.
-	// It exists for the qualities the API has no query parameter for.
-	filter func(map[string]any) bool
+	// sizeParam is the query parameter the endpoint reads its page size from.
+	// Posts and media read "limit" and silently ignore "per_page", so that is
+	// the default; mentions read "per_page".
+	sizeParam string
+	// maxSize is the largest page the endpoint serves. Walking every page asks
+	// for pages this large, so --all costs as few requests as possible.
+	maxSize int
 }
 
 func (l *listFlags) register(cmd *cobra.Command) {
@@ -38,13 +42,25 @@ func (l *listFlags) register(cmd *cobra.Command) {
 	f.IntVar(&l.limit, "limit", 0, "stop after this many items (implies --all)")
 }
 
-func (l *listFlags) query() url.Values {
+func (l *listFlags) query(walking bool) url.Values {
 	q := url.Values{}
 	if l.page > 0 {
 		q.Set("page", strconv.Itoa(l.page))
 	}
-	if l.perPage > 0 {
-		q.Set("per_page", strconv.Itoa(l.perPage))
+
+	size := l.perPage
+	if size == 0 && walking && l.maxSize > 0 {
+		size = l.maxSize
+		if l.limit > 0 && l.limit < size {
+			size = l.limit
+		}
+	}
+	if size > 0 {
+		param := l.sizeParam
+		if param == "" {
+			param = "limit"
+		}
+		q.Set(param, strconv.Itoa(size))
 	}
 	return q
 }
@@ -52,40 +68,27 @@ func (l *listFlags) query() url.Values {
 // run fetches one page, or walks the whole collection when --all or --limit
 // was given, and prints the result.
 func (l *listFlags) run(cmd *cobra.Command, e *Env, path string, extra url.Values, columns []output.Column) error {
-	q := l.query()
+	walking := l.all || l.limit > 0
+	q := l.query(walking)
 	for k, values := range extra {
 		for _, v := range values {
 			q.Add(k, v)
 		}
 	}
 
-	if l.all || l.limit > 0 {
+	if walking {
 		raw, err := e.Client.Paginate(ctxOf(cmd), path, q, l.limit)
 		if err != nil {
 			return err
 		}
-		return e.renderFiltered(raw, l.filter, columns)
+		return e.RenderRaw(raw, columns)
 	}
 
 	resp, err := e.Client.Get(ctxOf(cmd), path, q)
 	if err != nil {
 		return err
 	}
-	if resp.Status == 0 || l.filter == nil {
-		return e.Render(resp, columns)
-	}
-	return e.renderFiltered(resp.Body, l.filter, columns)
-}
-
-func (e *Env) renderFiltered(raw []byte, keep func(map[string]any) bool, columns []output.Column) error {
-	if keep == nil || e.DryRun {
-		return e.RenderRaw(raw, columns)
-	}
-	filtered, err := filterRows(raw, keep)
-	if err != nil {
-		return err
-	}
-	return e.RenderRaw(filtered, columns)
+	return e.Render(resp, columns)
 }
 
 // readInput reads a JSON document from a file, or from stdin when the path is
@@ -285,37 +288,6 @@ func marshalCollection[T any](rows []T) ([]byte, error) {
 		rows = []T{}
 	}
 	return json.Marshal(map[string]any{"data": rows})
-}
-
-// filterRows applies a client-side predicate to a collection payload, leaving
-// the envelope and every field of the kept records intact.
-func filterRows(raw []byte, keep func(map[string]any) bool) ([]byte, error) {
-	var doc any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, fmt.Errorf("the response was not JSON: %w", err)
-	}
-
-	rows := output.Rows(doc)
-	kept := make([]any, 0, len(rows))
-	for _, row := range rows {
-		record, ok := row.(map[string]any)
-		if !ok || keep(record) {
-			kept = append(kept, row)
-		}
-	}
-
-	envelope, ok := doc.(map[string]any)
-	if !ok {
-		return json.Marshal(map[string]any{"data": kept})
-	}
-	if _, hasData := envelope["data"]; !hasData {
-		return json.Marshal(map[string]any{"data": kept})
-	}
-	envelope["data"] = kept
-	if meta, ok := envelope["meta"].(map[string]any); ok {
-		meta["filtered"] = len(kept)
-	}
-	return json.Marshal(envelope)
 }
 
 // toInt reads an identifier that the API may encode as a number or a string.

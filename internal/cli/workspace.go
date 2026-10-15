@@ -1,11 +1,8 @@
 package cli
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 
-	"github.com/inovector/mixpost-cli/internal/mixpost"
 	"github.com/inovector/mixpost-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -47,12 +44,6 @@ The list is not paginated and takes no filters.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			resp, err := env.Client.Do(ctxOf(cmd), instanceRequest(http.MethodGet, "workspaces"))
 			if err != nil {
-				// The endpoint is newer than some releases. A 404 here is the
-				// instance not offering it, not a mistyped URL.
-				var apiErr *mixpost.APIError
-				if errors.As(err, &apiErr) && apiErr.Status == 404 {
-					return explained(fmt.Errorf("this instance does not provide GET /api/workspaces; read the uuid from the dashboard URL instead: %w", err))
-				}
 				return err
 			}
 			return env.Render(resp, workspaceColumns())

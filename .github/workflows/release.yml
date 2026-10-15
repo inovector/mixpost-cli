@@ -35,5 +35,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Set HOMEBREW_TAP_TOKEN to publish the Homebrew formula.
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Pushes the Homebrew formula and the Scoop manifest to
+          # inovector/homebrew-tap and inovector/scoop-bucket.
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

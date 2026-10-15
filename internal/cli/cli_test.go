@@ -385,30 +385,6 @@ func TestRawCommandBuildsWorkspaceAndInstancePaths(t *testing.T) {
 	}
 }
 
-func TestAccountListFilterKeepsEveryFieldOfTheKeptRecords(t *testing.T) {
-	payload := `{"data":[
-	  {"id":1,"provider":"twitter","username":"acme","data":{"extra":true}},
-	  {"id":2,"provider":"linkedin","username":"acme-li"}
-	]}`
-	out, _, code := run(t, jsonHandler(t, 200, payload, nil), "account", "list", "--provider", "twitter")
-	if code != ExitOK {
-		t.Fatalf("exit code = %d", code)
-	}
-
-	var doc struct {
-		Data []map[string]any `json:"data"`
-	}
-	if err := json.Unmarshal([]byte(out), &doc); err != nil {
-		t.Fatalf("decode: %v\n%s", err, out)
-	}
-	if len(doc.Data) != 1 || doc.Data[0]["username"] != "acme" {
-		t.Fatalf("data = %v", doc.Data)
-	}
-	if _, ok := doc.Data[0]["data"]; !ok {
-		t.Error("filtering dropped a field the CLI does not model")
-	}
-}
-
 func TestUnknownOutputFormatIsAUsageError(t *testing.T) {
 	_, stderr, code := run(t, jsonHandler(t, 200, `{}`, nil), "post", "list", "-o", "xml")
 	if code != ExitUsage {
@@ -724,36 +700,6 @@ func TestWorkspaceNameIsLookedUpOnlyOncePerProcess(t *testing.T) {
 
 // Not every release ships the endpoints that need no workspace. Login must
 // still succeed then, while a bad token must still fail.
-func TestLoginSurvivesAnInstanceWithoutTheInstanceEndpoints(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
-		w.Write([]byte(`{"message":"Not found."}`))
-	})
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	t.Setenv(config.EnvConfig, filepath.Join(t.TempDir(), "config.yml"))
-	t.Setenv(config.EnvURL, "")
-	t.Setenv(config.EnvToken, "")
-	t.Setenv(config.EnvProfile, "")
-
-	_, stderr, code := runWithoutServer(t, "auth", "login", "--url", server.URL+"/mixpost", "--token", "tok")
-	if code != ExitOK {
-		t.Fatalf("exit code = %d, stderr: %s", code, stderr)
-	}
-	if !strings.Contains(stderr, "no credential check") {
-		t.Errorf("stderr = %q, want the login to say why it could not verify", stderr)
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if profile := cfg.Profile("default"); profile == nil || profile.Token != "tok" {
-		t.Errorf("the profile was not saved: %+v", profile)
-	}
-}
-
 func TestLoginStillFailsOnABadToken(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)

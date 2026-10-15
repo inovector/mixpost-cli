@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 
@@ -38,15 +37,20 @@ func newAuthLoginCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Store the URL and access token of a Mixpost instance",
+		Short: "Store the Mixpost address and personal key in a profile",
 		Long: `Store credentials in a profile so later commands do not need them.
 
-The URL is the instance address including the Mixpost core path, for example
-https://example.com/mixpost. Generate a token from Access Tokens in the user
-menu of your dashboard.`,
-		Example: `  mixpost auth login --url https://example.com/mixpost --token <token>
+Without --url the profile uses Mixpost Cloud. For a self-hosted instance, pass
+the address you open Mixpost at, including its core path, such as
+https://example.com/mixpost. An address without a path is tried with the
+default /mixpost core path first and at the site root second.
+
+The token is a personal key: open the user menu, click API, then Create a
+personal key. It is shown once, so copy it straight away.`,
+		Example: `  mixpost auth login --token <personal-key>
+  mixpost auth login --url https://example.com/mixpost --token <personal-key>
   echo "$MIXPOST_TOKEN" | mixpost auth login --url https://example.com/mixpost --token-stdin
-  mixpost auth login --url https://staging.example.com/mixpost --token <token> --profile staging`,
+  mixpost auth login --url https://staging.example.com/mixpost --token <personal-key> --profile staging`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if profileName == "" {
@@ -56,15 +60,17 @@ menu of your dashboard.`,
 			cfg := env.Config
 			profile := cfg.EnsureProfile(profileName)
 
+			var candidates []string
 			if urlFlag != "" {
-				normalized, err := config.NormalizeBaseURL(urlFlag)
-				if err != nil {
+				var err error
+				if candidates, err = config.BaseURLCandidates(urlFlag); err != nil {
 					return usageError(err)
 				}
-				profile.URL = normalized
+				profile.URL = candidates[0]
 			}
 			if profile.URL == "" {
-				return usageError(errors.New("--url is required the first time you log in"))
+				profile.URL = config.DefaultBaseURL
+				env.Printer.PrintMessage("Using Mixpost Cloud (%s); pass --url to use a self-hosted instance.", config.DefaultBaseURL)
 			}
 
 			switch {
@@ -95,6 +101,9 @@ menu of your dashboard.`,
 			}
 
 			if !noVerify {
+				if len(candidates) > 1 {
+					profile.URL = pickBaseURL(cmd, profile, candidates)
+				}
 				if err := verifyProfile(cmd, profile); err != nil {
 					return err
 				}
@@ -112,20 +121,36 @@ menu of your dashboard.`,
 	}
 
 	f := cmd.Flags()
-	f.StringVar(&urlFlag, "url", "", "instance URL including the core path, e.g. https://example.com/mixpost")
-	f.StringVar(&token, "token", "", "access token")
-	f.BoolVar(&tokenStdin, "token-stdin", false, "read the access token from stdin")
+	f.StringVar(&urlFlag, "url", "", "self-hosted Mixpost address, e.g. https://example.com/mixpost (default: Mixpost Cloud)")
+	f.StringVar(&token, "token", "", "personal key")
+	f.BoolVar(&tokenStdin, "token-stdin", false, "read the personal key from stdin")
 	f.StringVar(&workspace, "workspace", "", "default workspace UUID for this profile")
 	f.StringVar(&profileName, "profile", "", "profile to write (default: the active profile)")
 	f.BoolVar(&noVerify, "no-verify", false, "skip the connectivity check")
 	return cmd
 }
 
-// verifyProfile makes one cheap authenticated call so a typo in the URL or the
-// token surfaces at login instead of at the first real command.
-func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
-	client := mixpost.New(mixpost.Options{
-		BaseURL:   profile.URL,
+// pickBaseURL returns the first candidate base URL that serves the Mixpost
+// API, judged by whether the workspace listing answers with anything but 404. When none does, the first candidate stays, and verification reports why.
+func pickBaseURL(cmd *cobra.Command, profile *config.Profile, candidates []string) string {
+	for i, candidate := range candidates {
+		probe := *profile
+		probe.URL = candidate
+		_, err := profileClient(&probe).Workspaces(ctxOf(cmd))
+		var apiErr *mixpost.APIError
+		if err == nil || (errors.As(err, &apiErr) && apiErr.Status != 404) {
+			if i > 0 {
+				env.Printer.PrintMessage("No Mixpost API under %s; using %s.", candidates[0], candidate)
+			}
+			return candidate
+		}
+	}
+	return candidates[0]
+}
+
+func profileClient(profile *config.Profile) *mixpost.Client {
+	return mixpost.New(mixpost.Options{
+		BaseURL:   profile.BaseURL(),
 		Token:     profile.Token,
 		Workspace: profile.Workspace,
 		Timeout:   flags.timeout,
@@ -135,7 +160,12 @@ func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
 		Debug:     flags.debug,
 		DebugOut:  env.Printer.Err,
 	})
+}
 
+// verifyProfile makes one cheap authenticated call so a typo in the URL or the
+// token surfaces at login instead of at the first real command.
+func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
+	client := profileClient(profile)
 	ctx := ctxOf(cmd)
 	if profile.Workspace != "" {
 		if _, err := client.Get(ctx, "accounts", nil); err != nil {
@@ -144,26 +174,11 @@ func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
 		return nil
 	}
 
-	// With no workspace to address, try the endpoints that need none. Not every
-	// release ships both, so a 404 means "this instance does not offer that
-	// check", while a 401 really is a bad token and must stop the login.
-	var missing error
-	for _, path := range []string{"ping", "workspaces"} {
-		_, err := client.Do(ctx, instanceRequest(http.MethodGet, path))
-		if err == nil {
-			return nil
-		}
-
-		var apiErr *mixpost.APIError
-		if errors.As(err, &apiErr) && apiErr.Status == 404 {
-			missing = err
-			continue
-		}
-		return fmt.Errorf("could not reach the instance with these credentials: %w", err)
+	// With no workspace to address, list the workspaces: it needs none and
+	// every edition serves it, unlike ping.
+	if _, err := client.Workspaces(ctx); err != nil {
+		return fmt.Errorf("could not reach Mixpost with these credentials: %w", err)
 	}
-
-	env.Printer.PrintMessage("Note: this instance offers no credential check that needs no workspace (%v).", missing)
-	env.Printer.PrintMessage("Pass --workspace <uuid> to verify the token against a workspace.")
 	return nil
 }
 
@@ -171,7 +186,7 @@ func promptToken(printer *output.Printer) (string, error) {
 	if !output.IsTTY(stdin) {
 		return "", usageError(errors.New("pass --token, or pipe the token in with --token-stdin"))
 	}
-	fmt.Fprint(printer.Err, "Access token: ")
+	fmt.Fprint(printer.Err, "Personal key: ")
 	line, err := bufio.NewReader(stdin).ReadString('\n')
 	if err != nil {
 		return "", fmt.Errorf("read token: %w", err)
@@ -209,7 +224,7 @@ func newAuthStatusCommand() *cobra.Command {
 				}
 				row := map[string]any{
 					"profile":   name,
-					"url":       profile.URL,
+					"url":       profile.BaseURL(),
 					"token":     mixpost.Redact(profile.Token),
 					"workspace": profile.Workspace,
 					"active":    name == env.Profile,
@@ -281,7 +296,7 @@ func newAuthLogoutCommand() *cobra.Command {
 func profileSummary(name string, profile *config.Profile, authenticated bool) []byte {
 	raw, _ := json.Marshal(map[string]any{"data": []map[string]any{{
 		"profile":       name,
-		"url":           profile.URL,
+		"url":           profile.BaseURL(),
 		"token":         mixpost.Redact(profile.Token),
 		"workspace":     profile.Workspace,
 		"active":        true,

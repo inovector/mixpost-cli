@@ -2,8 +2,10 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +21,14 @@ func mediaColumns() []output.Column {
 		{Header: "name", Path: "name", MaxWidth: 34},
 		{Header: "type", Path: "type"},
 		{Header: "mime", Path: "mime_type"},
+		{Header: "size", Fn: func(row any) string {
+			size, ok := toInt(output.Get(row, "size"))
+			if !ok {
+				return ""
+			}
+			return mixpost.HumanBytes(int64(size))
+		}},
+		{Header: "folder", Path: "folder.name", MaxWidth: 20},
 		{Header: "created", Path: "created_at"},
 	}
 }
@@ -36,32 +46,97 @@ func newMediaCommand() *cobra.Command {
 		newMediaStatusCommand(),
 		newMediaUpdateCommand(),
 		newMediaDeleteCommand(),
+		newMediaFolderCommand(),
 	)
 	return cmd
 }
+
+var (
+	mediaTypes  = []string{"image", "gif", "video"}
+	mediaUsages = []string{"published", "scheduled", "draft", "unused"}
+	mediaSorts  = []string{"newest", "oldest", "name", "size"}
+)
 
 func newMediaListCommand() *cobra.Command {
 	var (
 		list      listFlags
 		mediaType string
+		folder    string
+		keyword   string
+		usage     string
+		favorite  bool
+		sort      string
+		mimeTypes []string
 	)
 
 	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List media files",
-		Args:    cobra.NoArgs,
+		Long: `List the media library, newest first.
+
+Without --folder the whole library is listed flat, across every folder;
+--folder root lists the files filed in no folder. --keyword searches the whole
+library, so --folder and --favorite are ignored while it is set.`,
+		Example: `  mixpost media list --type video --usage unused
+  mixpost media list --folder Brand/Q4 --sort name
+  mixpost media list --keyword logo -o id`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			query := queryValues{}
 			if mediaType != "" {
-				list.filter = func(row map[string]any) bool {
-					return strings.EqualFold(output.Stringify(row["type"]), mediaType)
+				if !contains(mediaTypes, mediaType) {
+					return usageError(fmt.Errorf("--type must be one of: %s", strings.Join(mediaTypes, ", ")))
 				}
+				query.Set("type", mediaType)
 			}
-			return list.run(cmd, env, "media", nil, mediaColumns())
+			if folder != "" {
+				uuid, root, err := resolveFolder(ctxOf(cmd), env.Client, folder)
+				if err != nil {
+					return err
+				}
+				if root {
+					uuid = "root"
+				}
+				query.Set("folder", uuid)
+			}
+			if keyword != "" {
+				query.Set("keyword", keyword)
+			}
+			if usage != "" {
+				if !contains(mediaUsages, usage) {
+					return usageError(fmt.Errorf("--usage must be one of: %s", strings.Join(mediaUsages, ", ")))
+				}
+				query.Set("usage", usage)
+			}
+			if favorite {
+				query.Set("favorite", "1")
+			}
+			if sort != "" {
+				if !contains(mediaSorts, sort) {
+					return usageError(fmt.Errorf("--sort must be one of: %s", strings.Join(mediaSorts, ", ")))
+				}
+				query.Set("sort", sort)
+			}
+			for _, mimeType := range splitList(mimeTypes) {
+				query.Add("mime_types[]", mimeType)
+			}
+			return list.run(cmd, env, "media", query, mediaColumns())
 		},
 	}
+	list.maxSize = 100
 	list.register(cmd)
-	cmd.Flags().StringVar(&mediaType, "type", "", "keep only media of this type, e.g. image, video")
+	f := cmd.Flags()
+	f.StringVar(&mediaType, "type", "", "only files of this kind: "+strings.Join(mediaTypes, ", "))
+	f.StringVar(&folder, "folder", "", `only files in this folder, by uuid, name or path (Brand/Q4), or "root"`)
+	f.StringVar(&keyword, "keyword", "", "only files whose name contains this")
+	f.StringVar(&usage, "usage", "", "only files used this way: "+strings.Join(mediaUsages, ", "))
+	f.BoolVar(&favorite, "favorite", false, "only files you starred")
+	f.StringVar(&sort, "sort", "", "order: "+strings.Join(mediaSorts, ", ")+" (default newest)")
+	f.StringArrayVar(&mimeTypes, "mime-type", nil, "only files of this MIME type, e.g. image/png; repeatable")
+	cmd.RegisterFlagCompletionFunc("type", fixedCompletion(mediaTypes))
+	cmd.RegisterFlagCompletionFunc("usage", fixedCompletion(mediaUsages))
+	cmd.RegisterFlagCompletionFunc("sort", fixedCompletion(mediaSorts))
 	return cmd
 }
 
@@ -83,6 +158,7 @@ func newMediaGetCommand() *cobra.Command {
 func newMediaUploadCommand() *cobra.Command {
 	var (
 		altText      string
+		folder       string
 		chunked      bool
 		threshold    string
 		concurrency  int
@@ -101,15 +177,26 @@ which the CLI then waits on.`,
 		Example: `  mixpost media upload photo.jpg
   mixpost media upload video.mp4 --alt-text "Product demo"
   mixpost media upload https://example.com/photo.jpg
-  mixpost media upload *.png -o id`,
+  mixpost media upload *.png --folder Brand -o id`,
 		Args: minArgs(1, "mixpost media upload <file|url>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			size, err := parseSize(threshold)
 			if err != nil {
 				return err
 			}
+			var folderUUID string
+			if folder != "" {
+				uuid, root, err := resolveFolder(ctxOf(cmd), env.Client, folder)
+				if err != nil {
+					return err
+				}
+				if !root {
+					folderUUID = uuid
+				}
+			}
 			opts := mixpost.UploadOptions{
 				AltText:     altText,
+				Folder:      folderUUID,
 				Chunked:     chunked,
 				Threshold:   size,
 				Concurrency: concurrency,
@@ -123,7 +210,7 @@ which the CLI then waits on.`,
 				var raw []byte
 				var err error
 				if isRemoteURL(arg) {
-					raw, err = uploadRemote(cmd, arg, altText, wait, pollInterval)
+					raw, err = uploadRemote(cmd, arg, opts, wait, pollInterval)
 				} else {
 					raw, err = env.Client.UploadFile(ctxOf(cmd), arg, opts)
 				}
@@ -146,6 +233,7 @@ which the CLI then waits on.`,
 
 	f := cmd.Flags()
 	f.StringVar(&altText, "alt-text", "", "alt text stored with the media")
+	f.StringVar(&folder, "folder", "", "folder to file the upload in, by uuid, name or path (default: the root)")
 	f.BoolVar(&chunked, "chunked", false, "always use the chunked endpoints, whatever the file size")
 	f.StringVar(&threshold, "chunk-threshold", "8MiB", "file size above which the chunked endpoints are used")
 	f.IntVar(&concurrency, "concurrency", 3, "chunks uploaded in parallel")
@@ -154,8 +242,8 @@ which the CLI then waits on.`,
 	return cmd
 }
 
-func uploadRemote(cmd *cobra.Command, fileURL, altText string, wait bool, pollInterval time.Duration) ([]byte, error) {
-	started, raw, err := env.Client.RemoteUploadInitiate(ctxOf(cmd), fileURL, altText)
+func uploadRemote(cmd *cobra.Command, fileURL string, opts mixpost.UploadOptions, wait bool, pollInterval time.Duration) ([]byte, error) {
+	started, raw, err := env.Client.RemoteUploadInitiate(ctxOf(cmd), fileURL, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -230,60 +318,95 @@ func newMediaStatusCommand() *cobra.Command {
 }
 
 func newMediaUpdateCommand() *cobra.Command {
-	var altText string
+	var name, altText, folder string
 
 	cmd := &cobra.Command{
 		Use:   "update <media-uuid>",
-		Short: "Change the alt text of a media file",
-		Args:  exactArgs(1, "mixpost media update <media-uuid> --alt-text <text>"),
+		Short: "Rename a media file, change its alt text, or file it in a folder",
+		Example: `  mixpost media update 511b8c2d-... --alt-text "Team photo"
+  mixpost media update 511b8c2d-... --name team.png --folder Brand
+  mixpost media update 511b8c2d-... --folder root`,
+		Args: exactArgs(1, "mixpost media update <media-uuid> --alt-text <text>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requireFlags(cmd, "alt-text"); err != nil {
-				return err
+			body := map[string]any{}
+			if cmd.Flags().Changed("name") {
+				body["name"] = name
 			}
-			resp, err := env.Client.Call(ctxOf(cmd), http.MethodPut, "media/"+args[0], nil, map[string]any{
-				"alt_text": altText,
-			})
-			if err != nil {
-				return err
+			if cmd.Flags().Changed("alt-text") {
+				body["alt_text"] = altText
 			}
-			return env.Render(resp, mediaColumns())
-		},
-	}
-	cmd.Flags().StringVar(&altText, "alt-text", "", "alt text (required)")
-	return cmd
-}
-
-func newMediaDeleteCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:     "delete <media-id>...",
-		Aliases: []string{"rm"},
-		Short:   "Delete media files by numeric id",
-		Args:    minArgs(1, "mixpost media delete <media-id>"),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ids, err := parseIDs(args, "media-id")
-			if err != nil {
-				return usageError(fmt.Errorf("media is deleted by numeric id, not uuid: %w", err))
+			if cmd.Flags().Changed("folder") {
+				uuid, root, err := resolveFolder(ctxOf(cmd), env.Client, folder)
+				if err != nil {
+					return err
+				}
+				if root {
+					body["folder"] = nil
+				} else {
+					body["folder"] = uuid
+				}
 			}
-			if err := env.Confirm(pluralPrompt("Delete", len(ids), "media file")); err != nil {
-				return err
+			if len(body) == 0 {
+				return usageError(errors.New("nothing to change: pass --name, --alt-text or --folder"))
 			}
 
-			// The endpoint is documented with "items" as parameters rather than
-			// a body, so both are sent; Laravel reads either.
-			query := queryValues{}
-			for _, id := range ids {
-				query.Add("items[]", itoa(id))
-			}
-			resp, err := env.Client.Do(ctxOf(cmd), mixpost.Request{
-				Method: http.MethodDelete,
-				Path:   "media",
-				Query:  query,
-				Body:   map[string]any{"items": ids},
-			})
+			resp, err := env.Client.Call(ctxOf(cmd), http.MethodPut, "media/"+args[0], nil, body)
 			if err != nil {
 				return err
 			}
 			return env.Render(resp, nil)
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&name, "name", "", "new file name")
+	f.StringVar(&altText, "alt-text", "", `alt text; "" clears it`)
+	f.StringVar(&folder, "folder", "", `folder to file it in, by uuid, name or path, or "root"`)
+	return cmd
+}
+
+// mediaDeleteBatch is the most media the API deletes in one request.
+const mediaDeleteBatch = 500
+
+func newMediaDeleteCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "delete <media-id|media-uuid>...",
+		Aliases: []string{"rm"},
+		Short:   "Delete media files by numeric id or uuid",
+		Long: `Delete media files and detach them from the posts that use them.
+
+Files are named by numeric id or by uuid, mixed freely. Identifiers that match
+nothing in the workspace are skipped by the API, so success does not prove that
+anything was deleted.`,
+		Example: `  mixpost media delete 12 13
+  mixpost media list --usage unused -o id | xargs mixpost media delete --yes`,
+		Args: minArgs(1, "mixpost media delete <media-id|media-uuid>"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			items := make([]any, 0, len(args))
+			for _, arg := range args {
+				switch id, err := strconv.Atoi(arg); {
+				case err == nil:
+					items = append(items, id)
+				case mixpost.LooksLikeUUID(arg):
+					items = append(items, arg)
+				default:
+					return usageError(fmt.Errorf("%q is neither a numeric media id nor a uuid", arg))
+				}
+			}
+			if err := env.Confirm(pluralPrompt("Delete", len(items), "media file")); err != nil {
+				return err
+			}
+
+			for start := 0; start < len(items); start += mediaDeleteBatch {
+				batch := items[start:min(start+mediaDeleteBatch, len(items))]
+				resp, err := env.Client.Call(ctxOf(cmd), http.MethodDelete, "media", nil, map[string]any{"items": batch})
+				if err != nil {
+					return err
+				}
+				if err := env.Render(resp, nil); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 }

@@ -147,13 +147,6 @@ func (c *Client) Tags(ctx context.Context) ([]Tag, error) {
 	if err := resp.DecodeInto(&payload); err != nil {
 		return nil, fmt.Errorf("decode tags: %w", err)
 	}
-	if payload.Data == nil {
-		// The tags endpoint may return a bare array.
-		var bare []Tag
-		if err := resp.DecodeInto(&bare); err == nil {
-			return bare, nil
-		}
-	}
 	return payload.Data, nil
 }
 

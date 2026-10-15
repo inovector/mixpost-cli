@@ -16,8 +16,9 @@ func newPingCommand() *cobra.Command {
 The endpoint is authenticated, so a success confirms both that the instance
 answers and that the token is good. It needs no workspace.
 
-Available in Mixpost Pro only, and only while API access tokens are enabled;
-on Enterprise use 'mixpost workspace list' to check a token instead.`,
+Available in self-hosted Mixpost Pro only, and only while API access tokens are
+enabled; on Enterprise and Mixpost Cloud use 'mixpost workspace list' to check a
+token instead.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			resp, err := env.Client.Do(ctxOf(cmd), instanceRequest(http.MethodGet, "ping"))

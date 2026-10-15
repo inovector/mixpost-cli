@@ -34,9 +34,37 @@ type Media struct {
 	CreatedAt string      `json:"created_at"`
 }
 
+// MediaFolder is a folder of the workspace media library. A folder is a
+// label: filing a file under one never moves the file.
+type MediaFolder struct {
+	UUID       string `json:"uuid"`
+	Name       string `json:"name"`
+	Parent     string `json:"parent"`
+	MediaCount int    `json:"media_count"`
+}
+
+// MediaFolders returns the workspace's whole folder tree, which the API never
+// paginates.
+func (c *Client) MediaFolders(ctx context.Context) ([]MediaFolder, error) {
+	resp, err := c.Get(ctx, "media/folders", nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Data []MediaFolder `json:"data"`
+	}
+	if err := resp.DecodeInto(&payload); err != nil {
+		return nil, fmt.Errorf("decode media folders: %w", err)
+	}
+	return payload.Data, nil
+}
+
 // UploadOptions controls a media upload.
 type UploadOptions struct {
 	AltText string
+	// Folder is the uuid of the media folder to file the upload in; empty
+	// files it at the root.
+	Folder string
 	// Chunked forces the chunked flow regardless of file size.
 	Chunked bool
 	// Threshold is the size above which the chunked flow is used.
@@ -94,6 +122,9 @@ func (c *Client) uploadPlan(path string, size int64, chunked bool, opts UploadOp
 	if opts.AltText != "" {
 		plan["alt_text"] = opts.AltText
 	}
+	if opts.Folder != "" {
+		plan["folder"] = opts.Folder
+	}
 	if chunked {
 		plan["mode"] = "chunked"
 		plan["requests"] = []string{
@@ -112,6 +143,9 @@ func (c *Client) uploadSingle(ctx context.Context, path string, opts UploadOptio
 	fields := map[string]string{}
 	if opts.AltText != "" {
 		fields["alt_text"] = opts.AltText
+	}
+	if opts.Folder != "" {
+		fields["folder"] = opts.Folder
 	}
 	progress(opts, fmt.Sprintf("uploading %s", filepath.Base(path)))
 
@@ -167,11 +201,7 @@ func (c *Client) uploadChunked(ctx context.Context, path string, size int64, opt
 		return nil, err
 	}
 
-	body := map[string]any{}
-	if opts.AltText != "" {
-		body["alt_text"] = opts.AltText
-	}
-	done, err := c.Call(ctx, http.MethodPost, "media/chunked/"+session.UploadUUID+"/complete", nil, body)
+	done, err := c.Call(ctx, http.MethodPost, "media/chunked/"+session.UploadUUID+"/complete", nil, opts.fileData())
 	if err != nil {
 		return nil, err
 	}
@@ -260,13 +290,24 @@ type RemoteUpload struct {
 	Media      json.RawMessage `json:"media"`
 }
 
+// fileData is the JSON body of the file details an upload carries alongside
+// the file itself.
+func (opts UploadOptions) fileData() map[string]any {
+	body := map[string]any{}
+	if opts.AltText != "" {
+		body["alt_text"] = opts.AltText
+	}
+	if opts.Folder != "" {
+		body["folder"] = opts.Folder
+	}
+	return body
+}
+
 // RemoteUploadInitiate starts a remote download. In a dry run the raw payload
 // is the request that would have been sent.
-func (c *Client) RemoteUploadInitiate(ctx context.Context, fileURL, altText string) (*RemoteUpload, []byte, error) {
-	body := map[string]any{"url": fileURL}
-	if altText != "" {
-		body["alt_text"] = altText
-	}
+func (c *Client) RemoteUploadInitiate(ctx context.Context, fileURL string, opts UploadOptions) (*RemoteUpload, []byte, error) {
+	body := opts.fileData()
+	body["url"] = fileURL
 	resp, err := c.Call(ctx, http.MethodPost, "media/remote/initiate", nil, body)
 	if err != nil {
 		return nil, nil, err
@@ -387,10 +428,35 @@ func fileMultipart(fields map[string]string, fileField, fileName, path string, o
 	}
 }
 
+// mediaTypes maps the extensions of every type the API accepts to the type it
+// expects. The system's own table is not enough: minimal images such as Alpine
+// ship none, and would send a video as text/plain.
+var mediaTypes = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".heic": "image/heic",
+	".heif": "image/heif",
+	".bmp":  "image/bmp",
+	".mp4":  "video/mp4",
+	".m4v":  "video/x-m4v",
+	".mov":  "video/quicktime",
+	".avi":  "video/x-msvideo",
+	".mkv":  "video/x-matroska",
+	".webm": "video/webm",
+	".flv":  "video/x-flv",
+	".wmv":  "video/x-ms-wmv",
+}
+
 // DetectMIME resolves a file's media type from its extension, falling back to
 // sniffing the first bytes of content.
 func DetectMIME(path string) (string, error) {
 	if ext := filepath.Ext(path); ext != "" {
+		if t, ok := mediaTypes[strings.ToLower(ext)]; ok {
+			return t, nil
+		}
 		if t := mime.TypeByExtension(ext); t != "" {
 			return strings.TrimSpace(strings.Split(t, ";")[0]), nil
 		}
