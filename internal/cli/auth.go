@@ -207,9 +207,8 @@ func promptToken(printer *output.Printer, baseURL, current string) (string, erro
 }
 
 // keysPage is the dashboard page that lists and creates personal access keys.
-// It shares its path with the API, which answers a browser with the page.
 func keysPage(baseURL string) string {
-	return baseURL + "/api"
+	return baseURL + "/profile/api"
 }
 
 func newAuthStatusCommand() *cobra.Command {

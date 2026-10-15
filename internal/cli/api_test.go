@@ -617,7 +617,7 @@ func TestLoginWithoutAKeySaysWhereToCreateOne(t *testing.T) {
 	if code != ExitUsage {
 		t.Fatalf("exit code = %d, want %d", code, ExitUsage)
 	}
-	if !strings.Contains(stderr, "https://cloud.mixpost.app/p/api") {
+	if !strings.Contains(stderr, "https://cloud.mixpost.app/p/profile/api") {
 		t.Errorf("stderr = %q, want the link to the personal access keys page", stderr)
 	}
 }
