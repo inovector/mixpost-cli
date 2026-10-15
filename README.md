@@ -53,7 +53,7 @@ go install github.com/inovector/mixpost-cli/cmd/mixpost@latest
 **Docker**
 
 ```bash
-docker run --rm -e MIXPOST_ACCESS_KEY \
+docker run --rm -e MIXPOST_PERSONAL_KEY \
   ghcr.io/inovector/mixpost-cli:latest post list -w acme
 ```
 
@@ -66,12 +66,12 @@ make build && ./mixpost version
 
 ## Quick start
 
-Create a personal access key: open the user menu of your Mixpost dashboard,
-click **API**, then **Create a personal key**. The key is shown once, so copy it
+Create a personal key: open the user menu of your Mixpost dashboard, click
+**API**, then **Create a personal key**. The key is shown once, so copy it
 straight away. Then:
 
 ```bash
-mixpost auth login --access-key <personal-access-key>
+mixpost auth login --personal-key <personal-key>
 mixpost workspace list                       # find your workspace UUID
 mixpost config set workspace <workspace-uuid>
 
@@ -84,7 +84,7 @@ For a self-hosted instance, pass `--url` with the address you open Mixpost at,
 including its core path:
 
 ```bash
-mixpost auth login --url https://example.com/mixpost --access-key <personal-access-key>
+mixpost auth login --url https://example.com/mixpost --personal-key <personal-key>
 ```
 
 A trailing `/api` is stripped, so all of these mean the same thing:
@@ -108,11 +108,11 @@ current_profile: production
 profiles:
   production:
     url: https://example.com/mixpost
-    access_key: "..."
+    personal_key: "..."
     workspace: 3bbd0951-5b04-432b-b2a0-688588b0720e
   staging:
     url: https://staging.example.com/mixpost
-    access_key: "..."
+    personal_key: "..."
 ```
 
 Values resolve as **flag → environment variable → profile**:
@@ -120,7 +120,7 @@ Values resolve as **flag → environment variable → profile**:
 | Variable | Flag | Meaning |
 |---|---|---|
 | `MIXPOST_URL` | `--url` | self-hosted Mixpost address, including the core path (default: Mixpost Cloud) |
-| `MIXPOST_ACCESS_KEY` | `--access-key` | personal access key |
+| `MIXPOST_PERSONAL_KEY` | `--personal-key` | personal key |
 | `MIXPOST_PROFILE` | `--profile` | profile to use |
 | `MIXPOST_CONFIG` | none | path to the configuration file |
 | `MIXPOST_OUTPUT` | `-o`, `--output` | default output format |
@@ -215,7 +215,7 @@ mixpost analytics    summary|account|post|posting-times|best-times
 Instance-level. No workspace needed:
 
 ```
-mixpost workspace list    # the workspaces your personal access key can reach
+mixpost workspace list    # the workspaces your personal key can reach
 mixpost ping              # is Mixpost up and the key valid (self-hosted Pro only)
 ```
 
@@ -228,7 +228,7 @@ This CLI covers the API available in **Mixpost Cloud, Pro and Enterprise**. The
 Enterprise admin panel under `/api/panel`, covering workspace administration,
 instance users, subscriptions and receipts, is deliberately not wrapped. Those
 endpoints are still reachable through the escape hatch if you run Enterprise
-and use the personal access key of an admin:
+and use the personal key of an admin:
 
 ```bash
 mixpost raw GET panel/workspaces

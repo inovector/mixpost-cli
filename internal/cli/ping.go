@@ -10,8 +10,8 @@ import (
 func newPingCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ping",
-		Short: "Check that Mixpost is reachable and the personal access key is valid",
-		Long: `Check Mixpost and the personal access key.
+		Short: "Check that Mixpost is reachable and the personal key is valid",
+		Long: `Check Mixpost and the personal key.
 
 The endpoint is authenticated, so a success confirms both that the instance
 answers and that the key is good. It needs no workspace.

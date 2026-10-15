@@ -21,7 +21,7 @@ func newWorkspaceCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "workspace",
 		Aliases: []string{"workspaces", "ws"},
-		Short:   "List the workspaces your personal access key can reach",
+		Short:   "List the workspaces your personal key can reach",
 	}
 	cmd.AddCommand(newWorkspaceListCommand())
 	return cmd

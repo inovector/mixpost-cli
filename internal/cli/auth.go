@@ -37,7 +37,7 @@ func newAuthLoginCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Store the Mixpost address and personal access key in a profile",
+		Short: "Store the Mixpost address and personal key in a profile",
 		Long: `Store credentials in a profile so later commands do not need them.
 
 Without --url the profile uses Mixpost Cloud. For a self-hosted instance, pass
@@ -45,12 +45,12 @@ the address you open Mixpost at, including its core path, such as
 https://example.com/mixpost. An address without a path is tried with the
 default /mixpost core path first and at the site root second.
 
-Create a personal access key from the user menu: click API, then Create a
-personal key. It is shown once, so copy it straight away.`,
-		Example: `  mixpost auth login --access-key <personal-access-key>
-  mixpost auth login --url https://example.com/mixpost --access-key <personal-access-key>
-  echo "$MIXPOST_ACCESS_KEY" | mixpost auth login --url https://example.com/mixpost --access-key-stdin
-  mixpost auth login --url https://staging.example.com/mixpost --access-key <personal-access-key> --profile staging`,
+Create a personal key from the user menu: click API, then Create a personal
+key. It is shown once, so copy it straight away.`,
+		Example: `  mixpost auth login --personal-key <personal-key>
+  mixpost auth login --url https://example.com/mixpost --personal-key <personal-key>
+  echo "$MIXPOST_PERSONAL_KEY" | mixpost auth login --url https://example.com/mixpost --personal-key-stdin
+  mixpost auth login --url https://staging.example.com/mixpost --personal-key <personal-key> --profile staging`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if profileName == "" {
@@ -76,7 +76,7 @@ personal key. It is shown once, so copy it straight away.`,
 			case keyStdin:
 				data, err := io.ReadAll(os.Stdin)
 				if err != nil {
-					return fmt.Errorf("read the personal access key from stdin: %w", err)
+					return fmt.Errorf("read the personal key from stdin: %w", err)
 				}
 				profile.Key = strings.TrimSpace(string(data))
 			case key != "":
@@ -93,7 +93,7 @@ personal key. It is shown once, so copy it straight away.`,
 				}
 			}
 			if profile.Key == "" {
-				return usageError(errors.New("no personal access key provided"))
+				return usageError(errors.New("no personal key provided"))
 			}
 			if workspace != "" {
 				profile.Workspace = workspace
@@ -125,8 +125,8 @@ personal key. It is shown once, so copy it straight away.`,
 
 	f := cmd.Flags()
 	f.StringVar(&urlFlag, "url", "", "self-hosted Mixpost address, e.g. https://example.com/mixpost (default: Mixpost Cloud)")
-	f.StringVar(&key, "access-key", "", "personal access key")
-	f.BoolVar(&keyStdin, "access-key-stdin", false, "read the personal access key from stdin")
+	f.StringVar(&key, "personal-key", "", "personal key")
+	f.BoolVar(&keyStdin, "personal-key-stdin", false, "read the personal key from stdin")
 	f.StringVar(&workspace, "workspace", "", "default workspace UUID for this profile")
 	f.StringVar(&profileName, "profile", "", "profile to write (default: the active profile)")
 	f.BoolVar(&noVerify, "no-verify", false, "skip the connectivity check")
@@ -185,23 +185,23 @@ func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
 	return nil
 }
 
-// promptKey reads a personal access key from the terminal without echoing it,
+// promptKey reads a personal key from the terminal without echoing it,
 // after saying where to create one. current is the stored key, which an empty
 // answer keeps.
 func promptKey(ctx context.Context, printer *output.Printer, baseURL, current string) (string, error) {
 	if !output.IsTTY(stdin) {
-		return "", usageError(fmt.Errorf("pass a personal access key with --access-key, or pipe it in with --access-key-stdin; create one at %s", keysPage(baseURL)))
+		return "", usageError(fmt.Errorf("pass a personal key with --personal-key, or pipe it in with --personal-key-stdin; create one at %s", keysPage(baseURL)))
 	}
-	printer.PrintMessage("Create a personal access key (click Create a personal key) at:\n\n  %s\n", output.Hyperlink(printer.Err, keysPage(baseURL)))
+	printer.PrintMessage("Open this page and click Create a personal key:\n\n  %s\n", output.Hyperlink(printer.Err, keysPage(baseURL)))
 	if current != "" {
-		fmt.Fprintf(printer.Err, "Personal access key (Enter keeps %s): ", mixpost.Redact(current))
+		fmt.Fprintf(printer.Err, "Personal key (Enter keeps %s): ", mixpost.Redact(current))
 	} else {
-		fmt.Fprint(printer.Err, "Personal access key: ")
+		fmt.Fprint(printer.Err, "Personal key: ")
 	}
 	return readTerminal(ctx, printer.Err, true)
 }
 
-// keysPage is the dashboard page that lists and creates personal access keys.
+// keysPage is the dashboard page that lists and creates personal keys.
 func keysPage(baseURL string) string {
 	return baseURL + "/profile/api"
 }
@@ -235,11 +235,11 @@ func newAuthStatusCommand() *cobra.Command {
 					continue
 				}
 				row := map[string]any{
-					"profile":    name,
-					"url":        profile.BaseURL(),
-					"access_key": mixpost.Redact(profile.Key),
-					"workspace":  profile.Workspace,
-					"active":     name == env.Profile,
+					"profile":      name,
+					"url":          profile.BaseURL(),
+					"personal_key": mixpost.Redact(profile.Key),
+					"workspace":    profile.Workspace,
+					"active":       name == env.Profile,
 				}
 				if err := verifyProfile(cmd, profile); err != nil {
 					row["authenticated"] = false
@@ -273,7 +273,7 @@ func newAuthLogoutCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "logout",
-		Short: "Remove a profile and its stored personal access key",
+		Short: "Remove a profile and its stored personal key",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if profileName == "" {
@@ -283,7 +283,7 @@ func newAuthLogoutCommand() *cobra.Command {
 			if cfg.Profile(profileName) == nil {
 				return usageError(fmt.Errorf("profile %q is not configured", profileName))
 			}
-			if err := env.Confirm(fmt.Sprintf("Remove profile %q and its stored personal access key?", profileName)); err != nil {
+			if err := env.Confirm(fmt.Sprintf("Remove profile %q and its stored personal key?", profileName)); err != nil {
 				return err
 			}
 
@@ -309,7 +309,7 @@ func profileSummary(name string, profile *config.Profile, authenticated bool) []
 	raw, _ := json.Marshal(map[string]any{"data": []map[string]any{{
 		"profile":       name,
 		"url":           profile.BaseURL(),
-		"access_key":    mixpost.Redact(profile.Key),
+		"personal_key":  mixpost.Redact(profile.Key),
 		"workspace":     profile.Workspace,
 		"active":        true,
 		"authenticated": authenticated,
@@ -322,7 +322,7 @@ func authColumns() []output.Column {
 		{Header: "profile", Path: "profile"},
 		{Header: "url", Path: "url", MaxWidth: 50},
 		{Header: "workspace", Path: "workspace"},
-		{Header: "access key", Path: "access_key"},
+		{Header: "personal key", Path: "personal_key"},
 		{Header: "authenticated", Path: "authenticated"},
 	}
 }

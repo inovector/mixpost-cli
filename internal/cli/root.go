@@ -77,7 +77,7 @@ Every command writes data to stdout and progress or errors to stderr, so output
 can be piped safely. Output is a table on a terminal and JSON everywhere else.
 
 Getting started:
-  mixpost auth login --access-key <personal-access-key>
+  mixpost auth login --personal-key <personal-key>
   mixpost workspace list
   mixpost config set workspace <uuid>
   mixpost account list`,
@@ -89,7 +89,7 @@ Getting started:
 	pf := root.PersistentFlags()
 	pf.StringVar(&flags.profile, "profile", "", "configuration profile to use ($MIXPOST_PROFILE)")
 	pf.StringVar(&flags.url, "url", "", "self-hosted Mixpost address, e.g. https://example.com/mixpost ($MIXPOST_URL; default: Mixpost Cloud)")
-	pf.StringVar(&flags.key, "access-key", "", "personal access key ($MIXPOST_ACCESS_KEY)")
+	pf.StringVar(&flags.key, "personal-key", "", "personal key ($MIXPOST_PERSONAL_KEY)")
 	pf.StringVarP(&flags.workspace, "workspace", "w", "", "workspace uuid or name; overrides the profile's workspace")
 	pf.StringVarP(&flags.format, "output", "o", "", "output format: "+strings.Join(output.Formats, ", ")+" (default table on a terminal, json otherwise)")
 	pf.StringVar(&flags.template, "template", "", "Go template used with --output template")
@@ -207,7 +207,7 @@ func setupEnv(cmd *cobra.Command, _ []string) error {
 
 	baseURL, key, workspace := resolveCredentials(cfg, profileName)
 	if key == "" {
-		return usageError(fmt.Errorf("no personal access key configured; run 'mixpost auth login' or set %s", config.EnvKey))
+		return usageError(fmt.Errorf("no personal key configured; run 'mixpost auth login' or set %s", config.EnvKey))
 	}
 
 	env.Client = mixpost.New(mixpost.Options{

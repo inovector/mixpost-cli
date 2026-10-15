@@ -16,7 +16,7 @@ import (
 // value stored in the active profile, and is in turn overridden by a flag.
 const (
 	EnvURL      = "MIXPOST_URL"
-	EnvKey      = "MIXPOST_ACCESS_KEY"
+	EnvKey      = "MIXPOST_PERSONAL_KEY"
 	EnvProfile  = "MIXPOST_PROFILE"
 	EnvConfig   = "MIXPOST_CONFIG"
 	EnvOutput   = "MIXPOST_OUTPUT"
@@ -41,7 +41,7 @@ const CloudHost = "cloud.mixpost.app"
 const CloudPath = "/p"
 
 // DefaultBaseURL is Mixpost Cloud, used whenever no URL is configured, so a
-// Cloud user only ever needs a personal access key.
+// Cloud user only ever needs a personal key.
 const DefaultBaseURL = "https://" + CloudHost + CloudPath
 
 // DefaultProfile is the profile used when none is selected.
@@ -50,7 +50,7 @@ const DefaultProfile = "default"
 // Profile holds the credentials for a single Mixpost instance.
 type Profile struct {
 	URL       string `yaml:"url"`
-	Key       string `yaml:"access_key"`
+	Key       string `yaml:"personal_key"`
 	Workspace string `yaml:"workspace,omitempty"`
 }
 

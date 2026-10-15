@@ -558,7 +558,7 @@ func TestLoginFallsBackToTheSiteRoot(t *testing.T) {
 	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, stderr, code := runWithoutServer(t, "auth", "login", "--url", server.URL, "--access-key", "t")
+	_, stderr, code := runWithoutServer(t, "auth", "login", "--url", server.URL, "--personal-key", "t")
 	if code != ExitOK {
 		t.Fatalf("exit code = %d, stderr: %s", code, stderr)
 	}
@@ -594,7 +594,7 @@ func TestLoginWithoutAURLStoresMixpostCloud(t *testing.T) {
 	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, stderr, code := runWithoutServer(t, "auth", "login", "--access-key", "key", "--no-verify")
+	_, stderr, code := runWithoutServer(t, "auth", "login", "--personal-key", "key", "--no-verify")
 	if code != ExitOK {
 		t.Fatalf("exit code = %d, stderr: %s", code, stderr)
 	}
@@ -618,6 +618,6 @@ func TestLoginWithoutAKeySaysWhereToCreateOne(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d", code, ExitUsage)
 	}
 	if !strings.Contains(stderr, "https://cloud.mixpost.app/p/profile/api") {
-		t.Errorf("stderr = %q, want the link to the personal access keys page", stderr)
+		t.Errorf("stderr = %q, want the link to the personal keys page", stderr)
 	}
 }

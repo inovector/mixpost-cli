@@ -35,7 +35,7 @@ func writeProfile(t *testing.T, baseURL, workspace string) string {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "config.yml")
-	document := "current_profile: default\nprofiles:\n  default:\n    url: " + baseURL + "\n    access_key: test-token\n"
+	document := "current_profile: default\nprofiles:\n  default:\n    url: " + baseURL + "\n    personal_key: test-token\n"
 	if workspace != "" {
 		document += "    workspace: " + workspace + "\n"
 	}
@@ -713,7 +713,7 @@ func TestLoginStillFailsOnABadToken(t *testing.T) {
 	t.Setenv(config.EnvKey, "")
 	t.Setenv(config.EnvProfile, "")
 
-	_, _, code := runWithoutServer(t, "auth", "login", "--url", server.URL+"/mixpost", "--access-key", "bad")
+	_, _, code := runWithoutServer(t, "auth", "login", "--url", server.URL+"/mixpost", "--personal-key", "bad")
 	if code != ExitUnauthorized {
 		t.Fatalf("exit code = %d, want %d", code, ExitUnauthorized)
 	}
