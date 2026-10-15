@@ -16,6 +16,7 @@ import (
 	"github.com/inovector/mixpost-cli/internal/config"
 	"github.com/inovector/mixpost-cli/internal/mixpost"
 	"github.com/inovector/mixpost-cli/internal/output"
+	"github.com/inovector/mixpost-cli/internal/update"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -135,16 +136,85 @@ func Execute() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	notice := startUpdateCheck(ctx)
+
 	root := NewRootCommand()
 	executed, err := root.ExecuteContextC(ctx)
-	if err == nil || isBrokenPipe(err) {
-		return ExitOK
+	code := ExitOK
+	if err != nil && !isBrokenPipe(err) {
+		err = asUsageError(err, commandPath(executed, root))
+		renderError(env.printerOrDefault(), err)
+		code = ExitCode(err)
 	}
-	err = asUsageError(err, commandPath(executed, root))
 
-	printer := env.printerOrDefault()
-	renderError(printer, err)
-	return ExitCode(err)
+	notice.print(executed)
+	return code
+}
+
+// updateNotice carries a background check for a newer release, so the command
+// never waits on GitHub before doing its work.
+type updateNotice struct {
+	result chan string
+}
+
+// updateWait is how long a finished command waits for a check still running.
+// A check runs at most once a day, so this delay is rare.
+const updateWait = time.Second
+
+// startUpdateCheck starts the daily check when someone is at a terminal to
+// read the result. CI, an opt-out, shell completion and output read by another
+// program all skip it.
+func startUpdateCheck(ctx context.Context) *updateNotice {
+	if update.Disabled() != "" || !isTerminal(stderr) || isCompletion(os.Args) {
+		return nil
+	}
+	checker, err := update.New(Version())
+	if err != nil {
+		return nil
+	}
+
+	notice := &updateNotice{result: make(chan string, 1)}
+	go func() {
+		latest, _ := checker.Newer(ctx)
+		notice.result <- latest
+	}()
+	return notice
+}
+
+func (n *updateNotice) print(executed *cobra.Command) {
+	if n == nil || env == nil || env.Printer.Format != output.FormatTable {
+		return
+	}
+	if executed != nil && strings.HasPrefix(executed.Name(), "__complete") {
+		return
+	}
+
+	var latest string
+	select {
+	case latest = <-n.result:
+	case <-time.After(updateWait):
+	}
+	if latest == "" {
+		return
+	}
+
+	path, _ := os.Executable()
+	fmt.Fprintf(env.Printer.Err, "\nA new version of mixpost is available: %s → %s\nUpdate with: %s\n",
+		strings.TrimPrefix(Version(), "v"), latest, update.Command(path))
+}
+
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && output.IsTTY(f)
+}
+
+func isCompletion(args []string) bool {
+	for _, arg := range args[1:] {
+		if strings.HasPrefix(arg, "__complete") || arg == "completion" {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Env) printerOrDefault() *output.Printer {

@@ -71,6 +71,22 @@ git clone https://github.com/inovector/mixpost-cli && cd mixpost-cli
 make build && ./mixpost version
 ```
 
+## Update
+
+Update the way you installed:
+
+| Installed with | Update with |
+|---|---|
+| Homebrew | `brew upgrade mixpost` |
+| Scoop | `scoop update mixpost` |
+| Install script | run the install script again |
+| Go | `go install github.com/inovector/mixpost-cli/cmd/mixpost@latest` |
+
+Once a day, a command run in a terminal checks for a newer release and, when
+there is one, prints the command that updates your installation. The check
+runs alongside the command, and never in CI, in a pipe or with structured
+output. Set `MIXPOST_NO_UPDATE_NOTIFIER=1` to turn it off.
+
 ## Quick start
 
 Create a personal key: open the user menu of your Mixpost dashboard, click
@@ -132,6 +148,7 @@ Values resolve as **flag → environment variable → profile**:
 | `MIXPOST_CONFIG` | none | path to the configuration file |
 | `MIXPOST_OUTPUT` | `-o`, `--output` | default output format |
 | `MIXPOST_INSECURE` | `--insecure` | skip TLS verification |
+| `MIXPOST_NO_UPDATE_NOTIFIER` | none | do not check for newer releases |
 
 Switch instances per command with `--profile staging`, or for a whole session
 with `mixpost config use staging`.
