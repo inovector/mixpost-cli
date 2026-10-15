@@ -605,7 +605,19 @@ func TestLoginWithoutAURLStoresMixpostCloud(t *testing.T) {
 	if got := cfg.Profile("default").URL; got != config.DefaultBaseURL {
 		t.Errorf("stored url = %q, want %q", got, config.DefaultBaseURL)
 	}
-	if !strings.Contains(stderr, "Mixpost Cloud") {
-		t.Errorf("stderr = %q, want a note that Cloud is used", stderr)
+}
+
+func TestLoginWithoutAKeySaysWhereToCreateOne(t *testing.T) {
+	t.Setenv(config.EnvConfig, filepath.Join(t.TempDir(), "config.yml"))
+	t.Setenv(config.EnvURL, "")
+	t.Setenv(config.EnvToken, "")
+	t.Setenv(config.EnvProfile, "")
+
+	_, stderr, code := runWithoutServer(t, "auth", "login")
+	if code != ExitUsage {
+		t.Fatalf("exit code = %d, want %d", code, ExitUsage)
+	}
+	if !strings.Contains(stderr, "https://cloud.mixpost.app/p/api") {
+		t.Errorf("stderr = %q, want the link to the personal access keys page", stderr)
 	}
 }

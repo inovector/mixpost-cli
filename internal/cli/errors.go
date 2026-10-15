@@ -202,7 +202,7 @@ func hint(printer *output.Printer, err error) {
 	}
 	switch apiErr.Status {
 	case 401:
-		fmt.Fprintln(printer.Err, "Hint: the personal access key is missing, expired or deleted. Run 'mixpost auth login'.")
+		fmt.Fprintln(printer.Err, "Hint: the personal access key is missing, expired or deleted. Run 'mixpost auth login' to use a new one.")
 	case 403:
 		fmt.Fprintln(printer.Err, "Hint: your role does not allow that action in this workspace. Check 'mixpost workspace list'.")
 	case 404:

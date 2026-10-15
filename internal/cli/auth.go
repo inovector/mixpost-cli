@@ -70,7 +70,6 @@ personal key. It is shown once, so copy it straight away.`,
 			}
 			if profile.URL == "" {
 				profile.URL = config.DefaultBaseURL
-				env.Printer.PrintMessage("Using Mixpost Cloud (%s); pass --url to use a self-hosted instance.", config.DefaultBaseURL)
 			}
 
 			switch {
@@ -85,7 +84,7 @@ personal key. It is shown once, so copy it straight away.`,
 			case output.IsTTY(stdin) || profile.Token == "":
 				// On a terminal, always ask: logging in again is how a stale
 				// key gets replaced. Enter keeps the stored one.
-				value, err := promptToken(env.Printer, profile.Token)
+				value, err := promptToken(env.Printer, profile.URL, profile.Token)
 				if err != nil {
 					return err
 				}
@@ -186,12 +185,14 @@ func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
 	return nil
 }
 
-// promptToken reads a personal access key from the terminal without echoing it.
-// current is the stored key, which an empty answer keeps.
-func promptToken(printer *output.Printer, current string) (string, error) {
+// promptToken reads a personal access key from the terminal without echoing it,
+// after saying where to create one. current is the stored key, which an empty
+// answer keeps.
+func promptToken(printer *output.Printer, baseURL, current string) (string, error) {
 	if !output.IsTTY(stdin) {
-		return "", usageError(errors.New("pass the personal access key with --token, or pipe it in with --token-stdin"))
+		return "", usageError(fmt.Errorf("pass a personal access key with --token, or pipe it in with --token-stdin; create one at %s", keysPage(baseURL)))
 	}
+	printer.PrintMessage("Create a personal access key at %s (click Create a personal key), then paste it here.", keysPage(baseURL))
 	if current != "" {
 		fmt.Fprintf(printer.Err, "Personal access key (Enter keeps %s): ", mixpost.Redact(current))
 	} else {
@@ -203,6 +204,12 @@ func promptToken(printer *output.Printer, current string) (string, error) {
 		return "", fmt.Errorf("read token: %w", err)
 	}
 	return strings.TrimSpace(string(value)), nil
+}
+
+// keysPage is the dashboard page that lists and creates personal access keys.
+// It shares its path with the API, which answers a browser with the page.
+func keysPage(baseURL string) string {
+	return baseURL + "/api"
 }
 
 func newAuthStatusCommand() *cobra.Command {
