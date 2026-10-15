@@ -13,17 +13,36 @@ can do it end to end.
 
 ## Install
 
-**Homebrew**
+**macOS and Linux: Homebrew**
 
 ```bash
 brew install inovector/tap/mixpost
+```
+
+**macOS and Linux: install script**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/inovector/mixpost-cli/main/install.sh | sh
+```
+
+The script picks the build for your system, verifies its checksum and installs
+it to `/usr/local/bin`, or to `~/.local/bin` when that is not writable. Set
+`MIXPOST_VERSION` to install a given release and `MIXPOST_INSTALL_DIR` to choose
+the directory.
+
+**Windows: Scoop**
+
+```powershell
+scoop bucket add inovector https://github.com/inovector/scoop-bucket
+scoop install mixpost
 ```
 
 **Binary release**
 
 Download the archive for your platform from the
 [releases page](https://github.com/inovector/mixpost-cli/releases) and put
-`mixpost` on your `PATH`.
+`mixpost` on your `PATH`. On macOS, prefer Homebrew or the install script: a
+binary downloaded through a browser is unsigned and Gatekeeper blocks it.
 
 **Go**
 
@@ -34,8 +53,7 @@ go install github.com/inovector/mixpost-cli/cmd/mixpost@latest
 **Docker**
 
 ```bash
-docker run --rm \
-  -e MIXPOST_URL -e MIXPOST_TOKEN \
+docker run --rm -e MIXPOST_TOKEN \
   ghcr.io/inovector/mixpost-cli:latest post list -w acme
 ```
 
