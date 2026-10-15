@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"github.com/inovector/mixpost-cli/internal/mixpost"
 	"github.com/inovector/mixpost-cli/internal/output"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newAuthCommand() *cobra.Command {
@@ -82,12 +82,16 @@ personal key. It is shown once, so copy it straight away.`,
 				profile.Token = strings.TrimSpace(string(data))
 			case token != "":
 				profile.Token = token
-			case profile.Token == "":
-				value, err := promptToken(env.Printer)
+			case output.IsTTY(stdin) || profile.Token == "":
+				// On a terminal, always ask: logging in again is how a stale
+				// key gets replaced. Enter keeps the stored one.
+				value, err := promptToken(env.Printer, profile.Token)
 				if err != nil {
 					return err
 				}
-				profile.Token = value
+				if value != "" {
+					profile.Token = value
+				}
 			}
 			if profile.Token == "" {
 				return usageError(errors.New("no token provided"))
@@ -182,16 +186,23 @@ func verifyProfile(cmd *cobra.Command, profile *config.Profile) error {
 	return nil
 }
 
-func promptToken(printer *output.Printer) (string, error) {
+// promptToken reads a personal key from the terminal without echoing it.
+// current is the stored key, which an empty answer keeps.
+func promptToken(printer *output.Printer, current string) (string, error) {
 	if !output.IsTTY(stdin) {
 		return "", usageError(errors.New("pass --token, or pipe the token in with --token-stdin"))
 	}
-	fmt.Fprint(printer.Err, "Personal key: ")
-	line, err := bufio.NewReader(stdin).ReadString('\n')
+	if current != "" {
+		fmt.Fprintf(printer.Err, "Personal key (Enter keeps %s): ", mixpost.Redact(current))
+	} else {
+		fmt.Fprint(printer.Err, "Personal key: ")
+	}
+	value, err := term.ReadPassword(int(stdin.Fd()))
+	fmt.Fprintln(printer.Err)
 	if err != nil {
 		return "", fmt.Errorf("read token: %w", err)
 	}
-	return strings.TrimSpace(line), nil
+	return strings.TrimSpace(string(value)), nil
 }
 
 func newAuthStatusCommand() *cobra.Command {
