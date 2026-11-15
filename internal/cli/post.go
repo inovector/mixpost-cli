@@ -449,6 +449,11 @@ func postToWriteBody(post map[string]any) map[string]any {
 					if media, ok := asSlice(block["media"]); ok {
 						rebuiltBlock["media"] = idsOf(media)
 					}
+					// The API replaces the whole post, so a cover left out here
+					// would be removed from its video.
+					if covers, ok := asSlice(block["video_thumbs"]); ok && len(covers) > 0 {
+						rebuiltBlock["video_thumbs"] = covers
+					}
 					blocks = append(blocks, rebuiltBlock)
 				}
 				clean["content"] = blocks

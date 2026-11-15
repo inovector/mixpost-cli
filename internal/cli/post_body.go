@@ -22,6 +22,9 @@ type postFlags struct {
 	urls      []string
 	media     []string
 
+	thumbnails   []string
+	thumbnailsAt []string
+
 	accounts   []string
 	tags       []string
 	createTags bool
@@ -47,6 +50,8 @@ func (p *postFlags) register(cmd *cobra.Command) {
 	f.StringArrayVar(&p.textFiles, "text-file", nil, `read post text from a file ("-" reads stdin); repeat for a thread`)
 	f.StringArrayVar(&p.urls, "link", nil, "link attached to the matching text block (Facebook and LinkedIn)")
 	f.StringArrayVar(&p.media, "media", nil, "media ids for the matching text block, comma separated; repeat per block")
+	f.StringArrayVar(&p.thumbnails, "thumbnail", nil, "cover image of a video as video_id=image_id, e.g. --thumbnail 4=9; repeatable")
+	f.StringArrayVar(&p.thumbnailsAt, "thumbnail-at", nil, `cover of a video as a moment of it, video_id=time in ms or a duration like 2.5s (the only cover TikTok takes); repeatable`)
 
 	f.StringArrayVarP(&p.accounts, "account", "a", nil, "target account by id, uuid, username or provider; repeatable")
 	f.StringArrayVarP(&p.tags, "tag", "t", nil, "tag by id, uuid or name; repeatable")
@@ -120,7 +125,12 @@ func (p *postFlags) build(ctx context.Context, cmd *cobra.Command, client *mixpo
 		return nil, err
 	}
 
-	if content != nil || options != nil {
+	thumbnails, err := p.buildThumbnails()
+	if err != nil {
+		return nil, err
+	}
+
+	if content != nil || options != nil || thumbnails != nil {
 		versions, _ := asSlice(body["versions"])
 		if len(versions) == 0 {
 			versions = []any{map[string]any{}}
@@ -136,7 +146,13 @@ func (p *postFlags) build(ctx context.Context, cmd *cobra.Command, client *mixpo
 			first["is_original"] = true
 		}
 		if content != nil {
+			carryThumbnails(first["content"], content)
 			first["content"] = content
+		}
+		if thumbnails != nil {
+			if err := applyThumbnails(first["content"], thumbnails); err != nil {
+				return nil, err
+			}
 		}
 		if options != nil {
 			merged, _ := asMap(first["options"])
