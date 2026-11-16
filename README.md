@@ -284,7 +284,18 @@ mixpost post create --text "1/ First" --text "2/ Second" --account twitter --que
 mixpost post create --text "Sensitive" --account mastodon \
   --option mastodon.sensitive=true \
   --option youtube.title="Release notes"
+
+# a video (media 4) with its cover: image 9, and the frame at 2.5s for TikTok
+mixpost post create --text "Behind the scenes" --media 4 \
+  --thumbnail 4=9 --thumbnail-at 4=2.5s --account tiktok --account instagram
 ```
+
+A video's cover is set with `--thumbnail video_id=image_id`, an image from the
+media library, and with `--thumbnail-at video_id=time`, a moment of the video in
+milliseconds or as a duration like `2.5s`. TikTok takes only the moment; the
+other networks that publish a cover take only the image, so give both to cover
+every account. The video must be in the post's media. Editing keeps the covers
+of the videos the post still posts.
 
 `--account` and `--tag` take an id, a uuid, a username, a display name or a
 provider, and are resolved against the workspace before the post is sent.
