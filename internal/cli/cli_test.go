@@ -718,3 +718,49 @@ func TestLoginStillFailsOnABadToken(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d", code, ExitUnauthorized)
 	}
 }
+
+func TestAccountRunSendsTheInputToTheAction(t *testing.T) {
+	api := newFakeAPI(map[string]string{
+		"POST /accounts/acc-1/actions/create-board": `{"data":{"board":{"id":"99","name":"Recipes"}}}`,
+	})
+
+	out, _, code := run(t, api, "account", "run", "acc-1", "create-board", "--input", "name=Recipes", "--input", "privacy=SECRET")
+
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, stdout = %s", code, out)
+	}
+	got := api.last(t, "POST", "/accounts/acc-1/actions/create-board").Body
+	if got["name"] != "Recipes" || got["privacy"] != "SECRET" || len(got) != 2 {
+		t.Errorf("body = %v, want name and privacy", got)
+	}
+	if !strings.Contains(out, `"99"`) {
+		t.Errorf("stdout = %s, want the created board", out)
+	}
+}
+
+func TestAccountRunWithoutInputSendsAnEmptyObject(t *testing.T) {
+	api := newFakeAPI(map[string]string{
+		"POST /accounts/acc-1/actions/list-boards": `{"data":{"boards":[]}}`,
+	})
+
+	_, _, code := run(t, api, "account", "run", "acc-1", "list-boards")
+
+	if code != ExitOK {
+		t.Fatalf("exit code = %d", code)
+	}
+	if raw := api.last(t, "POST", "/accounts/acc-1/actions/list-boards").Raw; raw != "{}" {
+		t.Errorf("body = %q, want {}", raw)
+	}
+}
+
+func TestAccountActionsListsThem(t *testing.T) {
+	api := newFakeAPI(map[string]string{
+		"GET /accounts/acc-1/actions": `{"data":[{"name":"list-boards","read_only":true,"description":"Read the boards","input":[]}]}`,
+	})
+
+	out, _, code := run(t, api, "account", "actions", "acc-1")
+
+	if code != ExitOK || !strings.Contains(out, "list-boards") {
+		t.Fatalf("exit code = %d, stdout = %s", code, out)
+	}
+}
