@@ -227,7 +227,7 @@ an agent can read them the same way it reads data:
 Workspace-scoped. These use the workspace from `-w` or the active profile:
 
 ```
-mixpost account      list|get
+mixpost account      list|get|actions|run
 mixpost post         list|get|create|update|schedule|queue|approve|delete
 mixpost tag          list|get|create|update|delete
 mixpost media        list|get|upload|status|update|delete
@@ -400,6 +400,17 @@ mixpost analytics best-times --tz Europe/Chisinau      # ready for post create -
 ```
 
 The table is a digest; `-o json` returns the full response, charts included.
+
+### Account actions
+
+What only one platform does with an account, such as creating a Pinterest
+board, is an action of that account:
+
+```bash
+mixpost account actions <account-uuid>                 # what it can do, -o json for each input
+mixpost account run <account-uuid> list-boards
+mixpost account run <account-uuid> create-board --input name=Recipes --input privacy=SECRET
+```
 
 ### Any endpoint
 
