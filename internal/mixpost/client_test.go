@@ -311,6 +311,8 @@ func TestUploadFileChunked(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Chunks upload in parallel, so the handler runs on several goroutines at once.
+	var mu sync.Mutex
 	chunks := map[string]string{}
 	var initiated, completed bool
 
@@ -352,7 +354,9 @@ func TestUploadFileChunked(t *testing.T) {
 					data = string(body)
 				}
 			}
+			mu.Lock()
 			chunks[index] = data
+			mu.Unlock()
 			w.WriteHeader(204)
 
 		case strings.HasSuffix(r.URL.Path, "/complete"):
